@@ -190,11 +190,8 @@ def seed_enhanced_database():
     db = SessionLocal()
 
     try:
-        # Clear existing data
         db.query(LearnerActivity).delete()
         db.commit()
-
-        # Generate and insert new data
         data = generate_enhanced_data()
 
         batch_size = 1000
@@ -206,7 +203,6 @@ def seed_enhanced_database():
 
         print("Enhanced database seeded successfully!")
         
-        # Print some statistics
         total_count = db.query(LearnerActivity).count()
         high_risk_count = db.query(LearnerActivity).filter(LearnerActivity.is_high_risk == True).count()
         avg_risk_score = db.query(func.avg(LearnerActivity.risk_score)).scalar()
