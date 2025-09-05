@@ -2,19 +2,26 @@ import os
 import random
 import numpy as np
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, func
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, func, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from dotenv import load_dotenv
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Supabase connection string format:
+# postgresql://postgres:[password]@[project-ref].supabase.co:5432/postgres
+SUPABASE_URL = os.getenv("SUPABASE_URL")  # Your Supabase database URL
+SUPABASE_PASSWORD = os.getenv("SUPABASE_PASSWORD")  # Your database password
+
+# Construct the connection string
+DATABASE_URL = f"postgresql://postgres:{SUPABASE_PASSWORD}@{SUPABASE_URL}/postgres"
 
 Base = declarative_base()
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=False)
 
 class LearnerActivity(Base):
     __tablename__ = 'learner_activity'
+    
     id = Column(Integer, primary_key=True)
     learner_id = Column(String(50), nullable=False)
     course_id = Column(String(50), nullable=False)
@@ -53,6 +60,22 @@ class LearnerActivity(Base):
     # Target variable (enhanced)
     is_high_risk = Column(Boolean, default=False)
     risk_score = Column(Float)  # 0.0-1.0 probability of dropping out
+    
+    # Add timestamps for Supabase best practices
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+def test_connection():
+    """Test the database connection"""
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT version()"))
+            version = result.fetchone()[0]
+            print(f"✅ Connected to PostgreSQL: {version}")
+            return True
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        return False
 
 def generate_enhanced_data(num_rows=45000):
     print("Generating enhanced learner data...")
@@ -176,46 +199,145 @@ def generate_enhanced_data(num_rows=45000):
             'course_enrollment_date': enrollment_date,
             'expected_completion_date': expected_completion_date,
             'is_high_risk': is_high_risk,
-            'risk_score': risk_score
+            'risk_score': risk_score,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
         })
     
     print(f"Generated {len(data)} enhanced records.")
     print(f"High-risk learners: {sum(1 for d in data if d['is_high_risk'])}")
     return data
 
+def create_indexes():
+    """Create useful indexes for better query performance"""
+    with engine.connect() as conn:
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_learner_id ON learner_activity(learner_id);",
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_course_id ON learner_activity(course_id);",
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_risk_score ON learner_activity(risk_score);",
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_is_high_risk ON learner_activity(is_high_risk);",
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_last_activity ON learner_activity(time_since_last_activity);",
+            "CREATE INDEX IF NOT EXISTS idx_learner_activity_created_at ON learner_activity(created_at);"
+        ]
+        
+        for index_sql in indexes:
+            try:
+                conn.execute(text(index_sql))
+                print(f"✅ Created index: {index_sql.split('ON')[1].split('(')[0].strip()}")
+            except Exception as e:
+                print(f"⚠️  Index creation warning: {e}")
+        
+        conn.commit()
+
 def seed_enhanced_database():
+    """Seed the database with enhanced learner data"""
+    if not test_connection():
+        return
+    
+    print("Creating tables...")
     Base.metadata.create_all(bind=engine)
+    print("✅ Tables created successfully!")
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
 
     try:
+        # Clear existing data
+        print("Clearing existing data...")
         db.query(LearnerActivity).delete()
         db.commit()
+        print("✅ Existing data cleared!")
+        
+        # Generate new data
         data = generate_enhanced_data()
 
+        # Insert data in batches for better performance
         batch_size = 1000
+        total_batches = (len(data) + batch_size - 1) // batch_size
+        
+        print(f"Inserting data in {total_batches} batches of {batch_size} records each...")
+        
         for i in range(0, len(data), batch_size):
             batch = data[i:i + batch_size]
             db.bulk_insert_mappings(LearnerActivity, batch)
             db.commit()
-            print(f"Inserted batch {i//batch_size + 1}/{(len(data) + batch_size - 1)//batch_size}")
+            print(f"✅ Inserted batch {i//batch_size + 1}/{total_batches}")
 
-        print("Enhanced database seeded successfully!")
+        print("Creating performance indexes...")
+        create_indexes()
+
+        print("\n🎉 Enhanced database seeded successfully!")
         
+        # Show summary statistics
         total_count = db.query(LearnerActivity).count()
         high_risk_count = db.query(LearnerActivity).filter(LearnerActivity.is_high_risk == True).count()
         avg_risk_score = db.query(func.avg(LearnerActivity.risk_score)).scalar()
         
-        print(f"Total records: {total_count}")
-        print(f"High-risk learners: {high_risk_count} ({high_risk_count/total_count*100:.1f}%)")
-        print(f"Average risk score: {avg_risk_score:.3f}")
+        print(f"\n📊 Summary Statistics:")
+        print(f"   Total records: {total_count:,}")
+        print(f"   High-risk learners: {high_risk_count:,} ({high_risk_count/total_count*100:.1f}%)")
+        print(f"   Average risk score: {avg_risk_score:.3f}")
+        
+        # Show sample data
+        print(f"\n🔍 Sample records:")
+        sample_records = db.query(LearnerActivity).limit(3).all()
+        for record in sample_records:
+            print(f"   Learner {record.learner_id}: Risk {record.risk_score:.3f}, Progress {record.module_progress:.1%}")
 
     except Exception as e:
         db.rollback()
-        print(f"Error seeding database: {e}")
+        print(f"❌ Error seeding database: {e}")
+        raise
+    finally:
+        db.close()
+
+def verify_data():
+    """Verify the data was inserted correctly"""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = SessionLocal()
+    
+    try:
+        # Basic counts
+        total_count = db.query(LearnerActivity).count()
+        print(f"Total records in database: {total_count:,}")
+        
+        # Risk distribution
+        risk_distribution = db.query(
+            LearnerActivity.is_high_risk,
+            func.count(LearnerActivity.id)
+        ).group_by(LearnerActivity.is_high_risk).all()
+        
+        print("\nRisk Distribution:")
+        for is_high_risk, count in risk_distribution:
+            risk_level = "High Risk" if is_high_risk else "Low Risk"
+            print(f"  {risk_level}: {count:,} ({count/total_count*100:.1f}%)")
+            
+        # Course distribution
+        course_distribution = db.query(
+            LearnerActivity.course_id,
+            func.count(LearnerActivity.id)
+        ).group_by(LearnerActivity.course_id).limit(5).all()
+        
+        print("\nTop 5 Courses by Enrollment:")
+        for course_id, count in course_distribution:
+            print(f"  {course_id}: {count:,} learners")
+            
+    except Exception as e:
+        print(f"❌ Error verifying data: {e}")
     finally:
         db.close()
 
 if __name__ == "__main__":
+    print("🚀 Starting Supabase PostgreSQL seeding process...")
+    print("=" * 50)
+    
+    # Check environment variables
+    if not SUPABASE_URL or not SUPABASE_PASSWORD:
+        print("❌ Please set SUPABASE_URL and SUPABASE_PASSWORD environment variables")
+        exit(1)
+    
     seed_enhanced_database()
+    verify_data()
+    
+    print("\n" + "=" * 50)
+    print("✅ Process completed successfully!")
