@@ -18,6 +18,7 @@ interface Course {
   _id: string
   title: string
   description: string
+  thumbnail?: string
   instructor: {
     name: string
     email: string
@@ -129,9 +130,10 @@ interface CourseCardProps {
   viewMode?: 'grid' | 'list'
   isAuthenticated?: boolean
   showEnrollmentStatus?: boolean
+  user?: any // Add user prop
 }
 
-const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = false, showEnrollmentStatus = false }: CourseCardProps) => {
+const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = false, showEnrollmentStatus = false, user }: CourseCardProps) => {
   const router = useRouter()
   
   const getDifficultyColor = (difficulty: string) => {
@@ -153,6 +155,8 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
   }
 
   const RiskIndicator = ({ course }: { course: Course }) => {
+    // Only show risk indicators to admin and instructor users
+    if (!user || (user.role !== 'admin' && user.role !== 'instructor')) return null
     if (!course.isEnrolled || !course.riskScore) return null
     
     const riskPercentage = Math.round(course.riskScore * 100)
@@ -207,6 +211,34 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
       <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500">
         <CardContent className="p-6">
           <div className="flex items-start gap-6">
+            {/* Thumbnail */}
+            <div className="flex-shrink-0">
+              <div className="w-32 h-20 rounded-lg overflow-hidden relative">
+                {course.thumbnail ? (
+                  <img 
+                    src={course.thumbnail} 
+                    alt={course.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to gradient background if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                
+                {/* Fallback gradient background */}
+                <div 
+                  className={`w-full h-full bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 flex items-center justify-center absolute inset-0 ${course.thumbnail ? 'hidden' : 'flex'}`}
+                  style={{ display: course.thumbnail ? 'none' : 'flex' }}
+                >
+                  <BookOpen className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </div>
+            
             <div className="flex-1">
               <div className="flex items-start justify-between mb-3">
                 <div>
@@ -215,7 +247,7 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
                       {course.title}
                     </Link>
                   </h3>
-                  <p className="text-gray-600 text-sm line-clamp-2">{course.description}</p>
+                  <p className="text-gray-700 text-sm line-clamp-2">{course.description}</p>
                 </div>
                 {showEnrollmentStatus && course.isEnrolled && (
                   <Badge className="bg-green-100 text-green-800">Enrolled</Badge>
@@ -226,11 +258,11 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
                 <Badge variant="outline" className={getDifficultyColor(course.difficulty)}>
                   {course.difficulty}
                 </Badge>
-                <div className="flex items-center gap-1 text-sm text-gray-600">
+                <div className="flex items-center gap-1 text-sm text-gray-700">
                   {getCategoryIcon(course.category)}
                   <span>{course.category}</span>
                 </div>
-                <div className="flex items-center gap-1 text-sm text-gray-600">
+                <div className="flex items-center gap-1 text-sm text-gray-700">
                   <Clock className="h-4 w-4" />
                   <span>{course.duration}h</span>
                 </div>
@@ -240,10 +272,10 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-medium">{course.stats.avgRating.toFixed(1)}</span>
-                    <span className="text-sm text-gray-500">({course.stats.totalRatings})</span>
+                    <span className="text-sm font-medium text-gray-900">{course.stats.avgRating.toFixed(1)}</span>
+                    <span className="text-sm text-gray-600">({course.stats.totalRatings})</span>
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-600">
+                  <div className="flex items-center gap-1 text-sm text-gray-700">
                     <Users className="h-4 w-4" />
                     <span>{course.stats.totalEnrolled.toLocaleString()}</span>
                   </div>
@@ -293,27 +325,48 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
     <Card className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
       <div className="relative">
         {/* Course Thumbnail */}
-        <div className="w-full h-48 bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 flex items-center justify-center relative">
-          <div className="absolute inset-0 bg-black bg-opacity-10"></div>
-          <BookOpen className="h-16 w-16 text-white relative z-10 group-hover:scale-110 transition-transform duration-300" />
+        <div className="w-full h-48 relative overflow-hidden bg-gray-100">
+          {course.thumbnail ? (
+            <img 
+              src={course.thumbnail} 
+              alt={course.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                // Fallback to gradient background if image fails to load
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          
+          {/* Fallback gradient background */}
+          <div 
+            className={`w-full h-48 bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 flex items-center justify-center absolute inset-0 ${course.thumbnail ? 'hidden' : 'flex'}`}
+            style={{ display: course.thumbnail ? 'none' : 'flex' }}
+          >
+            <div className="absolute inset-0 bg-black bg-opacity-10"></div>
+            <BookOpen className="h-16 w-16 text-white relative z-10 group-hover:scale-110 transition-transform duration-300" />
+          </div>
           
           {/* Enrollment Status Badge */}
           {showEnrollmentStatus && course.isEnrolled && (
-            <div className="absolute top-4 left-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
+            <div className="absolute top-4 left-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold z-20">
               <CheckCircle2 className="h-3 w-3 inline mr-1" />
               Enrolled
             </div>
           )}
           
           {/* Category Badge */}
-          <div className="absolute top-4 right-4 bg-white bg-opacity-90 text-gray-800 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
+          <div className="absolute top-4 right-4 bg-white bg-opacity-90 text-gray-800 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 z-20">
             {getCategoryIcon(course.category)}
             {course.category}
           </div>
           
           {/* Progress Bar for Active Courses */}
           {course.isEnrolled && course.progress !== undefined && (
-            <div className="absolute bottom-0 left-0 right-0 bg-white bg-opacity-95 p-3">
+            <div className="absolute bottom-0 left-0 right-0 bg-white bg-opacity-95 p-3 z-20">
               <div className="flex items-center justify-between text-xs text-gray-700 mb-1">
                 <span>Progress</span>
                 <span className="font-semibold">{(course.progress * 100).toFixed(0)}%</span>
@@ -336,7 +389,7 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
           </Badge>
           <div className="flex items-center gap-1">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-            <span className="text-sm font-medium">{course.stats.avgRating.toFixed(1)}</span>
+            <span className="text-sm font-medium text-gray-900">{course.stats.avgRating.toFixed(1)}</span>
           </div>
         </div>
         
@@ -353,7 +406,7 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
       
       <CardContent className="pt-0">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4 text-sm text-gray-600">
+          <div className="flex items-center gap-4 text-sm text-gray-700">
             <div className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
               <span>{course.duration}h</span>
@@ -366,7 +419,7 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
         </div>
         
         <div className="flex items-center gap-2 mb-3">
-          <div className="flex-1 text-sm text-gray-600">
+          <div className="flex-1 text-sm text-gray-700">
             by {course.instructor.name}
           </div>
         </div>
@@ -599,6 +652,13 @@ const CoursesPage = () => {
               {isAuthenticated && (
                 <div className="flex items-center gap-4">
                   <Link
+                    href="/achievements"
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <Trophy className="h-4 w-4" />
+                    Achievements
+                  </Link>
+                  <Link
                     href="/analytics"
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
@@ -607,7 +667,7 @@ const CoursesPage = () => {
                   </Link>
                   <Link
                     href="/dashboard"
-                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Dashboard
                   </Link>
@@ -674,7 +734,7 @@ const CoursesPage = () => {
                     placeholder="Search courses..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                   />
                 </div>
               </div>
@@ -684,7 +744,7 @@ const CoursesPage = () => {
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
                 >
                   <option value="all">All Categories</option>
                   {categories.map((category) => (
@@ -698,7 +758,7 @@ const CoursesPage = () => {
                 <select
                   value={selectedDifficulty}
                   onChange={(e) => setSelectedDifficulty(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
                 >
                   <option value="all">All Levels</option>
                   <option value="beginner">Beginner</option>
@@ -710,13 +770,13 @@ const CoursesPage = () => {
                 <div className="flex bg-gray-100 rounded-lg p-1">
                   <button
                     onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm' : ''}`}
+                    className={`p-2 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <Grid className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setViewMode('list')}
-                    className={`p-2 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
+                    className={`p-2 rounded transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <List className="h-4 w-4" />
                   </button>
@@ -793,6 +853,7 @@ const CoursesPage = () => {
                         viewMode={viewMode}
                         isAuthenticated={isAuthenticated}
                         showEnrollmentStatus={activeTab === 'enrolled'}
+                        user={user}
                       />
                     ))}
                   </div>

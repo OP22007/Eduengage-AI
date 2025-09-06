@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import NotificationCenter from '@/components/NotificationCenter'
+import NotificationCenter from '@/components/NotificationCenterNew'
 import { 
   BookOpen, 
   BarChart3, 
@@ -30,6 +30,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [notificationOpen, setNotificationOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -40,7 +41,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     ? [
         { name: 'Dashboard', href: '/dashboard', icon: Home },
         { name: 'Learners', href: '/admin/learners', icon: Users },
-        { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+        { name: 'Analytics', href: '/analytics', icon: BarChart3 },
         { name: 'Interventions', href: '/admin/interventions', icon: MessageSquare },
         { name: 'Settings', href: '/settings', icon: Settings },
       ]
@@ -151,7 +152,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
 
             <div className="flex items-center space-x-4">
-              <NotificationCenter />
+              <button
+                onClick={() => setNotificationOpen(true)}
+                className="relative p-2 rounded-md hover:bg-gray-100"
+              >
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  3
+                </span>
+              </button>
               
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                 {getInitials(user?.profile?.name || 'User')}
@@ -165,6 +174,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* Notification Center */}
+      <NotificationCenter 
+        isOpen={notificationOpen} 
+        onClose={() => setNotificationOpen(false)} 
+      />
     </div>
   )
 }

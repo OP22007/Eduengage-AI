@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, X, CheckCircle, AlertTriangle, Info, Zap } from 'lucide-react'
+import { Bell, X, CheckCircle, AlertTriangle, Info, Zap, MessageSquare, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { notificationsAPI } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Notification {
   id: string
@@ -13,122 +15,188 @@ interface Notification {
   message: string
   timestamp: Date
   read: boolean
-  action?: {
-    label: string
-    onClick: () => void
+  metadata?: {
+    learnerId?: string
+    riskScore?: number
+    riskLevel?: string
   }
+  actions?: Array<{
+    label: string
+    type: string
+    data: any
+  }>
 }
 
 export default function NotificationCenter() {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // Simulate real-time notifications
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'warning',
-        title: 'High-Risk Learner Alert',
-        message: 'Sarah Johnson in Data Science course shows 85% dropout risk',
-        timestamp: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
-        read: false,
-        action: {
-          label: 'Send Intervention',
-          onClick: () => console.log('Send intervention')
-        }
-      },
-      {
-        id: '2',
-        type: 'ai',
-        title: 'AI Insight',
-        message: 'Detected pattern: Learners struggle most with Module 3 in ML course',
-        timestamp: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-        read: false,
-        action: {
-          label: 'View Analysis',
-          onClick: () => console.log('View analysis')
-        }
-      },
-      {
-        id: '3',
-        type: 'success',
-        title: 'Intervention Successful',
-        message: 'John Doe re-engaged after automated nudge (was at 92% risk)',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        read: false
-      },
-      {
-        id: '4',
-        type: 'info',
-        title: 'Weekly Report Ready',
-        message: 'Platform engagement report for this week is now available',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        read: true
-      }
-    ]
+    if (user) {
+      fetchNotifications()
+    }
+  }, [user])
 
-    setNotifications(mockNotifications)
-    setUnreadCount(mockNotifications.filter(n => !n.read).length)
-
-    // Simulate new notifications coming in
-    const interval = setInterval(() => {
-      const newNotification: Notification = {
-        id: Date.now().toString(),
-        type: Math.random() > 0.7 ? 'warning' : Math.random() > 0.5 ? 'ai' : 'info',
-        title: 'New Activity Detected',
-        message: 'Real-time engagement monitoring detected significant pattern changes',
-        timestamp: new Date(),
-        read: false
-      }
-
-      setNotifications(prev => [newNotification, ...prev.slice(0, 9)]) // Keep only 10 latest
-      setUnreadCount(prev => prev + 1)
-    }, 30000) // New notification every 30 seconds
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notification =>
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    )
-    setUnreadCount(prev => Math.max(0, prev - 1))
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(notification => ({ ...notification, read: true })))
-    setUnreadCount(0)
-  }
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-600" />
-      case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-red-600" />
-      case 'ai':
-        return <Zap className="h-4 w-4 text-purple-600" />
-      default:
-        return <Info className="h-4 w-4 text-blue-600" />
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true)
+      const response = await notificationsAPI.getNotifications()
+      const notificationsData = response.data.data.notifications || []
+      
+      // Convert timestamp strings to Date objects
+      const formattedNotifications = notificationsData.map((notification: any) => ({
+        ...notification,
+        timestamp: new Date(notification.timestamp)
+      }))
+      
+      setNotifications(formattedNotifications)
+      setUnreadCount(response.data.data.unreadCount || 0)
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+      // Fallback to mock data in case of error
+      setMockNotifications()
+    } finally {
+      setLoading(false)
     }
   }
 
-  const getTimeAgo = (timestamp: Date) => {
+  const setMockNotifications = () => {
+    if (user?.role === 'admin' || user?.role === 'instructor') {
+      const mockNotifications: Notification[] = [
+        {
+          id: '1',
+          type: 'warning',
+          title: 'High-Risk Learner Alert',
+          message: 'Sarah Johnson shows 85% dropout risk',
+          timestamp: new Date(Date.now() - 5 * 60 * 1000),
+          read: false,
+          metadata: { learnerId: 'mock-learner-1', riskScore: 0.85, riskLevel: 'high' },
+          actions: [
+            { label: 'Send Intervention', type: 'intervention', data: { learnerId: 'mock-learner-1' } },
+            { label: 'View Profile', type: 'view', data: { learnerId: 'mock-learner-1' } }
+          ]
+        },
+        {
+          id: '2',
+          type: 'ai',
+          title: 'AI Insight',
+          message: 'Detected pattern: Learners struggle most with Module 3',
+          timestamp: new Date(Date.now() - 15 * 60 * 1000),
+          read: false
+        },
+        {
+          id: '3',
+          type: 'success',
+          title: 'Intervention Successful',
+          message: 'John Doe re-engaged after automated nudge (was at 92% risk)',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000),
+          read: false
+        },
+        {
+          id: '4',
+          type: 'info',
+          title: 'Weekly Report Ready',
+          message: 'Platform engagement report for this week is now available',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          read: true
+        }
+      ]
+      setNotifications(mockNotifications)
+      setUnreadCount(mockNotifications.filter(n => !n.read).length)
+    } else {
+      const learnerNotifications: Notification[] = [
+        {
+          id: '1',
+          type: 'success',
+          title: 'Great Progress!',
+          message: "You're 75% complete with your Data Science course. Keep it up!",
+          timestamp: new Date(Date.now() - 10 * 60 * 1000),
+          read: false
+        },
+        {
+          id: '2',
+          type: 'info',
+          title: 'New Module Available',
+          message: 'Module 4: Advanced Machine Learning is now available',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000),
+          read: false
+        }
+      ]
+      setNotifications(learnerNotifications)
+      setUnreadCount(learnerNotifications.filter(n => !n.read).length)
+    }
+  }
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      await notificationsAPI.markAsRead(notificationId)
+      setNotifications(prev => 
+        prev.map(notification => 
+          notification.id === notificationId 
+            ? { ...notification, read: true }
+            : notification
+        )
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      await notificationsAPI.markAllAsRead()
+      setNotifications(prev => 
+        prev.map(notification => ({ ...notification, read: true }))
+      )
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error)
+    }
+  }
+
+  const handleAction = async (action: { label: string; type: string; data: any }) => {
+    if (action.type === 'intervention') {
+      try {
+        await notificationsAPI.sendIntervention({
+          learnerId: action.data.learnerId,
+          interventionType: 'automated_nudge',
+          message: 'Automated intervention triggered due to high dropout risk'
+        })
+        alert('Intervention sent successfully!')
+      } catch (error) {
+        console.error('Error sending intervention:', error)
+        alert('Failed to send intervention')
+      }
+    } else if (action.type === 'view') {
+      // Navigate to learner profile or analytics
+      console.log('Navigate to learner profile:', action.data.learnerId)
+    }
+  }
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle className="h-5 w-5 text-green-500" />
+      case 'warning': return <AlertTriangle className="h-5 w-5 text-orange-500" />
+      case 'info': return <Info className="h-5 w-5 text-blue-500" />
+      case 'ai': return <Zap className="h-5 w-5 text-purple-500" />
+      default: return <Info className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const formatTime = (timestamp: Date) => {
     const now = new Date()
-    const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60))
-    
-    if (diffInMinutes < 1) return 'Just now'
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-    
-    const diffInHours = Math.floor(diffInMinutes / 60)
-    if (diffInHours < 24) return `${diffInHours}h ago`
-    
-    const diffInDays = Math.floor(diffInHours / 24)
-    return `${diffInDays}d ago`
+    const diff = now.getTime() - timestamp.getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (days > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    if (minutes > 0) return `${minutes}m ago`
+    return 'Just now'
   }
 
   return (
@@ -205,7 +273,7 @@ export default function NotificationCenter() {
                           {notification.title}
                         </p>
                         <span className="text-xs text-gray-500 ml-2">
-                          {getTimeAgo(notification.timestamp)}
+                          {formatTime(notification.timestamp)}
                         </span>
                       </div>
                       
@@ -213,18 +281,40 @@ export default function NotificationCenter() {
                         {notification.message}
                       </p>
                       
-                      {notification.action && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mt-2 h-7 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            notification.action?.onClick()
-                          }}
-                        >
-                          {notification.action.label}
-                        </Button>
+                      {/* Risk Score Badge */}
+                      {notification.metadata?.riskScore && (
+                        <div className="flex items-center mt-2">
+                          <span className={cn(
+                            "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                            notification.metadata.riskLevel === 'high' && "bg-red-100 text-red-800",
+                            notification.metadata.riskLevel === 'medium' && "bg-yellow-100 text-yellow-800",
+                            notification.metadata.riskLevel === 'low' && "bg-green-100 text-green-800"
+                          )}>
+                            {Math.round(notification.metadata.riskScore * 100)}% Risk
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Action Buttons */}
+                      {notification.actions && notification.actions.length > 0 && (
+                        <div className="flex items-center space-x-2 mt-3">
+                          {notification.actions.map((action, index) => (
+                            <Button
+                              key={index}
+                              size="sm"
+                              variant={action.type === 'intervention' ? 'default' : 'outline'}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleAction(action)
+                              }}
+                              className="text-xs"
+                            >
+                              {action.type === 'intervention' && <MessageSquare className="h-3 w-3 mr-1" />}
+                              {action.type === 'view' && <Eye className="h-3 w-3 mr-1" />}
+                              {action.label}
+                            </Button>
+                          ))}
+                        </div>
                       )}
                     </div>
                     

@@ -85,4 +85,22 @@ export const analyticsAPI = {
   getMLStatus: () => api.get('/analytics/ml-status'),
 }
 
+// Notifications API
+export const notificationsAPI = {
+  getNotifications: () => api.get('/notifications'),
+  markAsRead: (notificationId: string) => api.patch(`/notifications/${notificationId}/read`),
+  markAllAsRead: () => api.patch('/notifications/mark-all-read'),
+  sendIntervention: (data: { learnerId: string, interventionType: string, message: string }) => 
+    api.post('/notifications/send-intervention', data),
+}
+
+// Achievements API
+export const achievementsAPI = {
+  getAchievements: () => api.get('/achievements'),
+  updateProgress: (achievementId: string, progress: any) => 
+    api.post('/achievements/update', { achievementId, progress }),
+  unlockAchievement: (achievementId: string) => 
+    api.post(`/achievements/unlock/${achievementId}`),
+}
+
 export default api

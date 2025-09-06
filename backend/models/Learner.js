@@ -78,10 +78,37 @@ const learnerSchema = new mongoose.Schema({
     }
   },
   achievements: [{
-    badgeId: String,
+    id: String,
+    unlocked: { type: Boolean, default: false },
+    progress: {
+      current: { type: Number, default: 0 },
+      total: { type: Number, default: 1 }
+    },
     unlockedAt: Date,
-    progress: Number
+    updatedAt: { type: Date, default: Date.now }
   }],
+  badges: [{
+    id: String,
+    courseId: mongoose.Schema.Types.ObjectId,
+    unlocked: { type: Boolean, default: false },
+    unlockedAt: Date
+  }],
+  learningStreak: {
+    type: Number,
+    default: 0
+  },
+  longestStreak: {
+    type: Number,
+    default: 0
+  },
+  totalXP: {
+    type: Number,
+    default: 0
+  },
+  level: {
+    type: Number,
+    default: 1
+  },
   preferences: {
     notifications: {
       email: { type: Boolean, default: true },

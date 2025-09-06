@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 import { analyticsAPI } from '@/lib/api'
+import DashboardLayout from '@/components/DashboardLayout'
 import { 
   Brain, TrendingUp, AlertTriangle, Users, Target, 
   CheckCircle2, XCircle, Clock, Sparkles, BarChart3,
-  Activity, PieChart, LineChart, Shield
+  Activity, PieChart, LineChart, Shield, Lock
 } from 'lucide-react'
 
 interface MLInsights {
@@ -201,17 +203,33 @@ const MLServiceStatus = ({ status }: { status?: any }) => {
 
 export default function AnalyticsPage() {
   const { user, isAuthenticated } = useAuth()
+  const router = useRouter()
   const [insights, setInsights] = useState<MLInsights | null>(null)
   const [mlStatus, setMLStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!isAuthenticated) return
+    console.log('Analytics page - Auth status:', isAuthenticated)
+    console.log('Analytics page - User:', user)
+    console.log('Analytics page - User role:', user?.role)
+    
+    if (!isAuthenticated) {
+      console.log('Not authenticated, redirecting to login')
+      router.push('/login')
+      return
+    }
 
+    if (user && user.role !== 'admin' && user.role !== 'instructor') {
+      console.log('User role not authorized, redirecting to dashboard')
+      router.push('/dashboard')
+      return
+    }
+
+    console.log('User authorized, fetching analytics')
     fetchAnalytics()
     fetchMLStatus()
-  }, [isAuthenticated])
+  }, [isAuthenticated, user, router])
 
   const fetchAnalytics = async () => {
     try {
@@ -245,50 +263,72 @@ export default function AnalyticsPage() {
     )
   }
 
+  if (user && user.role !== 'admin' && user.role !== 'instructor') {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center max-w-md mx-auto p-8">
+            <Lock className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h2>
+            <p className="text-gray-600 mb-4">
+              This analytics dashboard is only available to administrators and instructors.
+            </p>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading ML insights...</p>
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading ML insights...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="bg-red-100 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-red-800 mb-2">Error</h3>
-            <p className="text-red-600">{error}</p>
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="bg-red-100 p-6 rounded-lg">
+              <h3 className="text-lg font-semibold text-red-800 mb-2">Error</h3>
+              <p className="text-red-600">{error}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   if (!insights) return null
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center gap-3">
-              <Brain className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">ML Analytics Dashboard</h1>
-                <p className="text-gray-600">AI-powered insights and predictions</p>
-              </div>
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-white shadow-sm border rounded-lg p-6">
+          <div className="flex items-center gap-3">
+            <Brain className="h-8 w-8 text-blue-600" />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">ML Analytics Dashboard</h1>
+              <p className="text-gray-600">AI-powered insights and predictions for administrators</p>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* ML Service Status */}
         <div className="mb-8">
           <MLServiceStatus status={mlStatus} />
@@ -396,6 +436,6 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

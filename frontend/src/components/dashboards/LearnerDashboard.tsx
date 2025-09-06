@@ -21,6 +21,7 @@ import {
   Star
 } from 'lucide-react'
 import { formatPercentage, formatDuration, cn } from '@/lib/utils'
+import Link from 'next/link'
 
 interface DashboardData {
   profile: {
@@ -307,7 +308,9 @@ export default function LearnerDashboard() {
               <div className="text-center py-8">
                 <Book className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">No courses enrolled yet</p>
-                <Button className="mt-4">Browse Courses</Button>
+                <Link href="/courses">
+                  <Button className="mt-4">Browse Courses</Button>
+                </Link>
               </div>
             )}
           </CardContent>
@@ -390,11 +393,19 @@ export default function LearnerDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-16 flex flex-col items-center justify-center space-y-2">
-              <PlayCircle className="h-6 w-6" />
-              <span>Resume Learning</span>
-            </Button>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Link href="/courses">
+              <Button className="h-16 flex flex-col items-center justify-center space-y-2 w-full">
+                <PlayCircle className="h-6 w-6" />
+                <span>Resume Learning</span>
+              </Button>
+            </Link>
+            <Link href="/achievements">
+              <Button variant="outline" className="h-16 flex flex-col items-center justify-center space-y-2 w-full">
+                <Award className="h-6 w-6" />
+                <span>Achievements</span>
+              </Button>
+            </Link>
             <Button variant="outline" className="h-16 flex flex-col items-center justify-center space-y-2">
               <Users className="h-6 w-6" />
               <span>Study Groups</span>
