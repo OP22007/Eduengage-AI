@@ -232,12 +232,12 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
                 <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
                     <span>Progress</span>
-                    <span>{Math.round(course.progress)}%</span>
+                    <span>{Math.round(course.progress * 100)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${course.progress}%` }}
+                      style={{ width: `${course.progress * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -276,12 +276,12 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
             <div className="absolute bottom-0 left-0 right-0 bg-white bg-opacity-95 p-3">
               <div className="flex items-center justify-between text-xs text-gray-700 mb-1">
                 <span>Progress</span>
-                <span className="font-semibold">{course.progress.toFixed(0)}%</span>
+                <span className="font-semibold">{(course.progress * 100).toFixed(0)}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${course.progress}%` }}
+                  style={{ width: `${course.progress * 100}%` }}
                 ></div>
               </div>
             </div>
@@ -376,7 +376,41 @@ const CoursesPage = () => {
   useEffect(() => {
     fetchCategories()
     fetchCoursesByTab(activeTab)
+    
+    // Prefetch all course data when authenticated to get correct counts
+    if (isAuthenticated) {
+      prefetchAllCourseData()
+    }
   }, [activeTab, isAuthenticated])
+
+  // Separate effect for authentication changes to refresh counts
+  useEffect(() => {
+    if (isAuthenticated) {
+      prefetchAllCourseData()
+    } else {
+      // Clear enrolled and available courses when not authenticated
+      setEnrolledCourses([])
+      setAvailableCourses([])
+    }
+  }, [isAuthenticated])
+
+  const prefetchAllCourseData = async () => {
+    try {
+      // Fetch all course types in parallel for accurate counts
+      const [allCoursesRes, enrolledRes, availableRes] = await Promise.all([
+        coursesAPI.getCourses({ sortBy }),
+        coursesAPI.getEnrolledCourses().catch(() => ({ data: { data: [] } })),
+        coursesAPI.getAvailableCourses().catch(() => ({ data: { data: [] } }))
+      ])
+      
+      // Update all course states
+      setCourses(allCoursesRes.data.data || [])
+      setEnrolledCourses(enrolledRes.data.data || [])
+      setAvailableCourses(availableRes.data.data || [])
+    } catch (err) {
+      console.error('Error prefetching course data:', err)
+    }
+  }
 
   const fetchCategories = async () => {
     try {
@@ -440,8 +474,8 @@ const CoursesPage = () => {
           : course
       ))
       
-      // Refresh data
-      fetchCoursesByTab(activeTab)
+      // Refresh all course data to update counts
+      await prefetchAllCourseData()
       alert('Successfully enrolled in course!')
     } catch (err: any) {
       console.error('Enrollment failed:', err)

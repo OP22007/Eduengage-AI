@@ -58,21 +58,38 @@ interface DashboardData {
 export default function LearnerDashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     fetchDashboardData()
+    
+    // Set up periodic refresh for real-time updates
+    const interval = setInterval(() => {
+      fetchDashboardData()
+    }, 30000) // Refresh every 30 seconds
+    
+    return () => clearInterval(interval)
   }, [])
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isManualRefresh = false) => {
     try {
+      if (isManualRefresh) {
+        setIsRefreshing(true)
+      }
       const response = await learnerAPI.getDashboard()
       setDashboardData(response.data.data)
+      setError('')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch dashboard data')
     } finally {
       setIsLoading(false)
+      setIsRefreshing(false)
     }
+  }
+
+  const handleRefresh = () => {
+    fetchDashboardData(true)
   }
 
   if (isLoading) {
@@ -100,7 +117,7 @@ export default function LearnerDashboard() {
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <p className="text-gray-600">{error}</p>
-          <Button onClick={fetchDashboardData} className="mt-4">
+          <Button onClick={handleRefresh} className="mt-4">
             Try Again
           </Button>
         </div>
@@ -165,11 +182,23 @@ export default function LearnerDashboard() {
             Here's your learning progress and insights
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Last login</p>
-          <p className="text-sm font-medium text-gray-900">
-            {new Date(engagement.lastLogin).toLocaleDateString()}
-          </p>
+        <div className="flex items-center gap-4">
+          <Button 
+            onClick={handleRefresh} 
+            variant="outline" 
+            size="sm"
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <TrendingUp className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Last login</p>
+            <p className="text-sm font-medium text-gray-900">
+              {new Date(engagement.lastLogin).toLocaleDateString()}
+            </p>
+          </div>
         </div>
       </div>
 

@@ -77,13 +77,7 @@ export default function CourseModulesPage() {
 
   const markModuleComplete = async (moduleId: string) => {
     try {
-      // Update progress (this would typically be a separate API call)
-      await coursesAPI.updateProgress(courseId, {
-        moduleId,
-        completed: true
-      })
-      
-      // Update local state
+      // Update local state immediately for better UX
       setCourseData(prev => {
         if (!prev) return prev
         
@@ -92,7 +86,8 @@ export default function CourseModulesPage() {
         )
         
         const completedCount = updatedModules.filter(m => m.isCompleted).length
-        const newProgress = (completedCount / updatedModules.length) * 100
+        const totalModules = updatedModules.length
+        const newProgress = totalModules > 0 ? completedCount / totalModules : 0 // Store as decimal (0-1)
         
         return {
           ...prev,
@@ -100,6 +95,12 @@ export default function CourseModulesPage() {
           progress: newProgress,
           completedModules: [...prev.completedModules, moduleId]
         }
+      })
+
+      // Update progress on server
+      await coursesAPI.updateProgress(courseId, {
+        moduleId,
+        completed: true
       })
     } catch (err) {
       console.error('Error marking module complete:', err)
@@ -165,13 +166,13 @@ export default function CourseModulesPage() {
                 <div className="text-right">
                   <div className="text-sm text-gray-600">Progress</div>
                   <div className="text-lg font-semibold text-blue-600">
-                    {Math.round(courseData.progress)}%
+                    {Math.round(courseData.progress * 100)}%
                   </div>
                 </div>
                 <div className="w-32 bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${courseData.progress}%` }}
+                    style={{ width: `${courseData.progress * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -185,10 +186,28 @@ export default function CourseModulesPage() {
           {/* Modules Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
                 <BookOpen className="h-5 w-5" />
                 Course Modules
               </h2>
+              
+              {/* Progress Summary */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                  <span>Module Progress</span>
+                  <span>
+                    {courseData.modules.filter(m => m.isCompleted).length} of {courseData.modules.length} completed
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: `${(courseData.modules.filter(m => m.isCompleted).length / courseData.modules.length) * 100}%` 
+                    }}
+                  ></div>
+                </div>
+              </div>
               
               <div className="space-y-3">
                 {courseData.modules.map((module, index) => (

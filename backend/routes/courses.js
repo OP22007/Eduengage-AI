@@ -31,13 +31,25 @@ router.get('/enrolled', auth, async (req, res) => {
       });
     }
 
-    const enrolledCourses = learner.enrollments.map(enrollment => ({
-      ...enrollment.courseId.toObject(),
-      isEnrolled: true,
-      progress: enrollment.progress || 0,
-      status: enrollment.status || 'active',
-      enrolledAt: enrollment.enrolledAt
-    }));
+    const enrolledCourses = learner.enrollments.map(enrollment => {
+      const course = enrollment.courseId.toObject();
+      
+      // Calculate actual progress based on completed modules
+      const totalModules = course.modules ? course.modules.length : 0;
+      // Filter out any invalid completed modules
+      const validCompletedModules = enrollment.completedModules ? 
+        enrollment.completedModules.filter(cm => cm && cm.moduleId) : [];
+      const completedModulesCount = validCompletedModules.length;
+      const actualProgress = totalModules > 0 ? (completedModulesCount / totalModules) : 0;
+      
+      return {
+        ...course,
+        isEnrolled: true,
+        progress: actualProgress,
+        status: enrollment.status || 'active',
+        enrolledAt: enrollment.enrolledAt
+      };
+    });
 
     res.json({
       success: true,
@@ -163,10 +175,22 @@ router.get('/', async (req, res) => {
           const enrollment = learner.enrollments.find(
             e => e.courseId.toString() === course._id.toString()
           );
+          
+          let actualProgress = 0;
+          if (enrollment) {
+            // Calculate actual progress based on completed modules
+            const totalModules = course.modules ? course.modules.length : 0;
+            // Filter out any invalid completed modules
+            const validCompletedModules = enrollment.completedModules ? 
+              enrollment.completedModules.filter(cm => cm && cm.moduleId) : [];
+            const completedModulesCount = validCompletedModules.length;
+            actualProgress = totalModules > 0 ? (completedModulesCount / totalModules) : 0;
+          }
+          
           return {
             ...course.toObject(),
             isEnrolled: !!enrollment,
-            progress: enrollment?.progress || 0,
+            progress: actualProgress,
             status: enrollment?.status || 'not_enrolled'
           };
         });
@@ -297,10 +321,23 @@ router.get('/:id/modules', auth, async (req, res) => {
     }
 
     // Return course modules with progress info
-    const modulesWithProgress = course.modules.map(module => ({
-      ...module.toObject(),
-      isCompleted: enrollment.completedModules?.includes(module._id) || false
-    }));
+    const modulesWithProgress = course.modules.map(module => {
+      const completedModule = enrollment.completedModules?.find(
+        cm => cm && cm.moduleId && cm.moduleId.toString() === module._id.toString()
+      );
+      
+      return {
+        ...module.toObject(),
+        isCompleted: !!completedModule,
+        completedAt: completedModule?.completedAt,
+        score: completedModule?.score
+      };
+    });
+
+    // Calculate actual progress based on completed modules
+    const completedCount = modulesWithProgress.filter(m => m.isCompleted).length;
+    const totalModules = modulesWithProgress.length;
+    const actualProgress = totalModules > 0 ? completedCount / totalModules : 0;
 
     res.json({
       success: true,
@@ -312,7 +349,7 @@ router.get('/:id/modules', auth, async (req, res) => {
           instructor: course.instructor
         },
         modules: modulesWithProgress,
-        progress: enrollment.progress || 0,
+        progress: actualProgress,
         status: enrollment.status || 'active',
         completedModules: enrollment.completedModules || []
       }
@@ -453,15 +490,47 @@ router.post('/:id/progress', auth, authorize('learner'), async (req, res) => {
       });
     }
 
-    // Update progress
-    if (progress !== undefined) {
-      enrollment.progress = Math.max(enrollment.progress, progress);
+    // Get course to calculate progress properly
+    const course = await Course.findById(req.params.id);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
     }
 
-    // Add completed module if provided
-    if (moduleId && completed && !enrollment.completedModules.includes(moduleId)) {
-      enrollment.completedModules.push(moduleId);
+    // Add completed module if provided and not already completed
+    if (moduleId && completed) {
+      const alreadyCompleted = enrollment.completedModules.find(
+        cm => cm && cm.moduleId && cm.moduleId.toString() === moduleId
+      );
+      
+      if (!alreadyCompleted) {
+        enrollment.completedModules.push({
+          moduleId: moduleId,
+          completedAt: new Date(),
+          score: 100 // Default score, could be passed in the request
+        });
+      }
     }
+
+    // Calculate progress based on completed modules (as decimal 0-1)
+    const totalModules = course.modules.length;
+    // Filter out any invalid completed modules
+    const validCompletedModules = enrollment.completedModules.filter(cm => cm && cm.moduleId);
+    const completedModulesCount = validCompletedModules.length;
+    const calculatedProgress = totalModules > 0 ? (completedModulesCount / totalModules) : 0;
+
+    // Update progress - use calculated progress or provided progress, whichever is higher
+    // Convert percentage input to decimal if needed
+    let progressDecimal = calculatedProgress;
+    if (progress !== undefined) {
+      // If progress is greater than 1, assume it's a percentage and convert to decimal
+      const inputProgress = progress > 1 ? progress / 100 : progress;
+      progressDecimal = Math.max(enrollment.progress, inputProgress, calculatedProgress);
+    }
+    
+    enrollment.progress = Math.min(progressDecimal, 1); // Ensure it doesn't exceed 1
 
     // Update last activity
     enrollment.lastActivity = new Date();
