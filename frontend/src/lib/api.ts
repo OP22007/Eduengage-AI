@@ -73,4 +73,16 @@ export const coursesAPI = {
   getCategories: () => api.get('/courses/categories'),
 }
 
+// Analytics API (ML Integration)
+export const analyticsAPI = {
+  getOverview: () => api.get('/analytics/overview'),
+  predictRisk: (learnerId: string) => api.post('/analytics/predict-risk', { learner_id: learnerId }),
+  predictRiskForUser: (userId: string) => api.post('/analytics/predict-risk', { user_id: userId }),
+  predictRiskForMe: () => api.get('/analytics/predict-risk/me'),
+  predictBatch: (learnerIds: string[]) => api.post('/analytics/predict-batch', { learner_ids: learnerIds }),
+  getLearnerAnalysis: (learnerId: string) => api.get(`/analytics/learner/${learnerId}/analysis`),
+  getLearnerId: () => api.get('/analytics/learner-id'),
+  getMLStatus: () => api.get('/analytics/ml-status'),
+}
+
 export default api

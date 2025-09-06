@@ -100,17 +100,34 @@ router.get('/overview', async (req, res) => {
 });
 
 // @route   POST /api/analytics/predict-risk
-// @desc    Get ML risk prediction for a learner
+// @desc    Get ML risk prediction for a learner (accepts userId or learnerId)
 // @access  Private
 router.post('/predict-risk', async (req, res) => {
   try {
-    const { learner_id } = req.body;
+    let { learner_id, user_id } = req.body;
     
+    // If user_id is provided instead of learner_id, find the learner
+    if (user_id && !learner_id) {
+      const learner = await Learner.findOne({ userId: user_id });
+      if (!learner) {
+        return res.status(404).json({
+          success: false,
+          message: 'No learner found for this user'
+        });
+      }
+      learner_id = learner._id.toString();
+    }
+    
+    // If no learner_id by now, try using current user
     if (!learner_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'learner_id is required'
-      });
+      const learner = await Learner.findOne({ userId: req.user._id });
+      if (!learner) {
+        return res.status(404).json({
+          success: false,
+          message: 'No learner found for current user'
+        });
+      }
+      learner_id = learner._id.toString();
     }
     
     // Call ML service
@@ -128,6 +145,51 @@ router.post('/predict-risk', async (req, res) => {
     
     if (error.response) {
       // ML service returned an error
+      return res.status(error.response.status).json({
+        success: false,
+        message: error.response.data.error || 'ML service error'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error connecting to ML service'
+    });
+  }
+});
+
+// @route   GET /api/analytics/predict-risk/me
+// @desc    Get ML risk prediction for current user
+// @access  Private
+router.get('/predict-risk/me', async (req, res) => {
+  try {
+    // Find learner for current user
+    const learner = await Learner.findOne({ userId: req.user._id });
+    if (!learner) {
+      return res.status(404).json({
+        success: false,
+        message: 'No learner profile found for current user'
+      });
+    }
+    
+    // Call ML service
+    const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict`, {
+      learner_id: learner._id.toString()
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        ...mlResponse.data,
+        learner_name: learner.name,
+        user_id: req.user._id
+      }
+    });
+    
+  } catch (error) {
+    console.error('ML prediction error:', error);
+    
+    if (error.response) {
       return res.status(error.response.status).json({
         success: false,
         message: error.response.data.error || 'ML service error'
@@ -210,6 +272,39 @@ router.get('/learner/:id/analysis', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error connecting to ML service'
+    });
+  }
+});
+
+// @route   GET /api/analytics/learner-id
+// @desc    Get learner ID for current user
+// @access  Private
+router.get('/learner-id', async (req, res) => {
+  try {
+    const learner = await Learner.findOne({ userId: req.user._id });
+    
+    if (!learner) {
+      return res.status(404).json({
+        success: false,
+        message: 'No learner profile found for current user'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user_id: req.user._id,
+        learner_id: learner._id,
+        learner_name: learner.name,
+        enrollments_count: learner.enrollments?.length || 0
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching learner ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
     });
   }
 });

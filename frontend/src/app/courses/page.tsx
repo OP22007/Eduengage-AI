@@ -38,6 +38,12 @@ interface Course {
   status?: string
   enrolledAt?: string
   isActive: boolean
+  riskScore?: number
+  riskLevel?: 'low' | 'medium' | 'high'
+  mlInsights?: {
+    interventionNeeded?: boolean
+    recommendations?: string[]
+  }
 }
 
 // Button Component
@@ -135,6 +141,39 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
       case 'advanced': return 'bg-red-100 text-red-800 border-red-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
+  }
+
+  const getRiskLevelColor = (riskLevel?: string) => {
+    switch (riskLevel) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-200'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'high': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const RiskIndicator = ({ course }: { course: Course }) => {
+    if (!course.isEnrolled || !course.riskScore) return null
+    
+    const riskPercentage = Math.round(course.riskScore * 100)
+    const riskLevel = course.riskLevel || (
+      course.riskScore > 0.7 ? 'high' : 
+      course.riskScore > 0.4 ? 'medium' : 'low'
+    )
+    
+    return (
+      <div className="flex items-center gap-2 mt-2">
+        <div className={`px-2 py-1 rounded-full text-xs font-medium border ${getRiskLevelColor(riskLevel)}`}>
+          Risk: {riskLevel} ({riskPercentage}%)
+        </div>
+        {course.mlInsights?.interventionNeeded && (
+          <div className="flex items-center gap-1 text-amber-600">
+            <Sparkles className="h-3 w-3" />
+            <span className="text-xs">AI Alert</span>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const getCategoryIcon = (category: string) => {
@@ -240,6 +279,7 @@ const CourseCard = ({ course, onEnroll, viewMode = 'grid', isAuthenticated = fal
                       style={{ width: `${course.progress * 100}%` }}
                     ></div>
                   </div>
+                  <RiskIndicator course={course} />
                 </div>
               )}
             </div>
@@ -548,11 +588,31 @@ const CoursesPage = () => {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-8">
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">Course Catalog</h1>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Discover new skills, advance your career, and achieve your learning goals with our comprehensive course library.
-              </p>
+            {/* Navigation */}
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h1 className="text-4xl font-bold text-gray-900 mb-2">Course Catalog</h1>
+                <p className="text-lg text-gray-600">
+                  Discover new skills, advance your career, and achieve your learning goals.
+                </p>
+              </div>
+              {isAuthenticated && (
+                <div className="flex items-center gap-4">
+                  <Link
+                    href="/analytics"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Brain className="h-4 w-4" />
+                    ML Analytics
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* Tabs */}
