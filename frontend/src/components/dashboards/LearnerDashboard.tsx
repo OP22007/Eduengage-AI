@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { learnerAPI } from '@/lib/api'
 import ProgressChart from '@/components/charts/ProgressChart'
+import MLInsights from '@/components/MLInsights'
 import { 
   TrendingUp, 
   Book, 
@@ -23,6 +24,7 @@ import {
 import { formatPercentage, formatDuration, cn } from '@/lib/utils'
 
 interface DashboardData {
+  learnerId?: string
   profile: {
     name: string
     email: string
@@ -53,6 +55,7 @@ interface DashboardData {
     completedCourses: number
     averageProgress: number
   }
+  riskAssessment?: any
 }
 
 export default function LearnerDashboard() {
@@ -198,6 +201,11 @@ export default function LearnerDashboard() {
           </Card>
         ))}
       </div>
+
+      {/* AI Risk Assessment for this learner */}
+      {dashboardData.learnerId && (
+        <MLInsights learnerId={dashboardData.learnerId} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Course Progress with Chart */}

@@ -59,6 +59,16 @@ export const adminAPI = {
   getLearners: (params?: any) => api.get('/admin/learners', { params }),
   getAnalytics: (params?: any) => api.get('/admin/analytics', { params }),
   createIntervention: (data: any) => api.post('/admin/intervention', data),
+  getMlPrediction: (learnerId: string) => api.post('/admin/ml-prediction', { learnerId }),
+}
+
+// Analytics API
+export const analyticsAPI = {
+  getOverview: () => api.get('/analytics/overview'),
+  predictRisk: (learnerId: string) => api.post('/analytics/predict-risk', { learner_id: learnerId }),
+  predictBatch: (learnerIds: string[]) => api.post('/analytics/predict-batch', { learner_ids: learnerIds }),
+  getLearnerAnalysis: (learnerId: string) => api.get(`/analytics/learner/${learnerId}/analysis`),
+  getMlStatus: () => api.get('/analytics/ml-status'),
 }
 
 export default api

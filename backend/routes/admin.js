@@ -12,7 +12,7 @@ router.use(auth);
 router.use(authorize('admin', 'instructor'));
 
 // @route   GET /api/admin/dashboard
-// @desc    Get admin dashboard overview
+// @desc    Get admin dashboard overview with ML predictions
 // @access  Private (Admin/Instructor only)
 router.get('/dashboard', async (req, res) => {
   try {
@@ -21,21 +21,63 @@ router.get('/dashboard', async (req, res) => {
     const totalCourses = await Course.countDocuments();
     const totalActivities = await Activity.countDocuments();
 
-    // Get risk distribution
-    const riskDistribution = await Learner.aggregate([
-      { $unwind: '$enrollments' },
-      {
-        $group: {
-          _id: {
-            $cond: [
-              { $gte: ['$enrollments.riskScore', 0.8] }, 'high',
-              { $cond: [{ $gte: ['$enrollments.riskScore', 0.6] }, 'medium', 'low'] }
-            ]
-          },
-          count: { $sum: 1 }
+    // Get all learners for ML risk assessment
+    const learners = await Learner.find({}).limit(100);
+    const learnerIds = learners.map(l => l._id.toString());
+
+    let mlRiskData = null;
+    let highRiskCount = 0;
+    let mediumRiskCount = 0;
+    let lowRiskCount = 0;
+
+    // Try to get ML risk predictions
+    try {
+      const axios = require('axios');
+      const ML_SERVICE_URL = 'http://localhost:8000';
+      
+      const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict_batch`, {
+        learner_ids: learnerIds
+      });
+      
+      mlRiskData = mlResponse.data;
+      
+      // Count risk levels from ML predictions
+      if (mlRiskData && mlRiskData.predictions) {
+        mlRiskData.predictions.forEach(prediction => {
+          if (prediction.risk_score >= 0.7) {
+            highRiskCount++;
+          } else if (prediction.risk_score >= 0.4) {
+            mediumRiskCount++;
+          } else {
+            lowRiskCount++;
+          }
+        });
+      }
+    } catch (mlError) {
+      console.error('ML service error:', mlError.message);
+      
+      // Fallback to database risk scores
+      for (const learner of learners) {
+        const enrollments = learner.enrollments || [];
+        const avgRiskScore = enrollments.length > 0 ? 
+          enrollments.reduce((sum, e) => sum + (e.riskScore || 0), 0) / enrollments.length : 0;
+        
+        if (avgRiskScore >= 0.7) {
+          highRiskCount++;
+        } else if (avgRiskScore >= 0.4) {
+          mediumRiskCount++;
+        } else {
+          lowRiskCount++;
         }
       }
-    ]);
+    }
+
+    // Get risk distribution
+    const riskDistribution = [
+      { _id: 'high', count: highRiskCount },
+      { _id: 'medium', count: mediumRiskCount },
+      { _id: 'low', count: lowRiskCount }
+    ];
 
     // Get recent activities
     const recentActivities = await Activity.find()
@@ -44,12 +86,35 @@ router.get('/dashboard', async (req, res) => {
       .populate('learnerId', 'userId')
       .populate('courseId', 'title');
 
-    // Get at-risk learners
-    const atRiskLearners = await Learner.find({
-      'enrollments.riskScore': { $gte: 0.6 }
-    })
-      .populate('userId', 'profile.name email')
-      .limit(10);
+    // Get at-risk learners with ML predictions
+    const atRiskLearners = [];
+    if (mlRiskData && mlRiskData.predictions) {
+      const highRiskPredictions = mlRiskData.predictions
+        .filter(p => p.risk_score >= 0.6)
+        .slice(0, 10);
+      
+      for (const prediction of highRiskPredictions) {
+        const learner = await Learner.findById(prediction.learner_id)
+          .populate('userId', 'profile.name email');
+        
+        if (learner) {
+          atRiskLearners.push({
+            ...learner.toObject(),
+            mlRiskScore: prediction.risk_score,
+            mlPrediction: prediction
+          });
+        }
+      }
+    } else {
+      // Fallback to database
+      const fallbackAtRisk = await Learner.find({
+        'enrollments.riskScore': { $gte: 0.6 }
+      })
+        .populate('userId', 'profile.name email')
+        .limit(10);
+      
+      atRiskLearners.push(...fallbackAtRisk);
+    }
 
     // Calculate engagement trends (last 7 days)
     const sevenDaysAgo = new Date();
@@ -81,7 +146,8 @@ router.get('/dashboard', async (req, res) => {
       riskDistribution,
       recentActivities,
       atRiskLearners,
-      engagementTrend
+      engagementTrend,
+      mlStatus: mlRiskData ? 'active' : 'fallback'
     };
 
     res.json({
@@ -270,6 +336,92 @@ router.get('/analytics', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching analytics'
+    });
+  }
+});
+
+// @route   POST /api/admin/ml-prediction
+// @desc    Get real-time ML prediction for a specific learner
+// @access  Private (Admin/Instructor only)
+router.post('/ml-prediction', async (req, res) => {
+  try {
+    const { learnerId } = req.body;
+    
+    if (!learnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'learnerId is required'
+      });
+    }
+    
+    // Get learner details
+    const learner = await Learner.findById(learnerId)
+      .populate('userId', 'profile.name email');
+    
+    if (!learner) {
+      return res.status(404).json({
+        success: false,
+        message: 'Learner not found'
+      });
+    }
+    
+    // Call ML service for prediction
+    try {
+      const axios = require('axios');
+      const ML_SERVICE_URL = 'http://localhost:8000';
+      
+      const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict`, {
+        learner_id: learnerId
+      });
+      
+      // Get detailed analysis
+      const analysisResponse = await axios.get(`${ML_SERVICE_URL}/analyze_learner/${learnerId}`);
+      
+      res.json({
+        success: true,
+        data: {
+          learner: {
+            id: learner._id,
+            name: learner.userId.profile.name,
+            email: learner.userId.email
+          },
+          prediction: mlResponse.data,
+          analysis: analysisResponse.data
+        }
+      });
+      
+    } catch (mlError) {
+      console.error('ML prediction error:', mlError.message);
+      
+      // Fallback to database risk score
+      const avgRiskScore = learner.enrollments.length > 0 ? 
+        learner.enrollments.reduce((sum, e) => sum + (e.riskScore || 0), 0) / learner.enrollments.length : 0;
+      
+      res.json({
+        success: true,
+        data: {
+          learner: {
+            id: learner._id,
+            name: learner.userId.profile.name,
+            email: learner.userId.email
+          },
+          prediction: {
+            risk_score: avgRiskScore,
+            risk_level: avgRiskScore >= 0.7 ? 'High' : avgRiskScore >= 0.4 ? 'Medium' : 'Low',
+            source: 'database_fallback'
+          },
+          analysis: {
+            message: 'ML service unavailable, using stored risk scores'
+          }
+        }
+      });
+    }
+    
+  } catch (error) {
+    console.error('ML prediction route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error getting ML prediction'
     });
   }
 });

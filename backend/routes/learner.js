@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const { auth, authorize } = require('../middleware/auth');
 const Learner = require('../models/Learner');
 const Course = require('../models/Course');
@@ -6,12 +7,15 @@ const Activity = require('../models/Activity');
 
 const router = express.Router();
 
+// ML Service configuration
+const ML_SERVICE_URL = 'http://localhost:8000';
+
 // All learner routes require authentication
 router.use(auth);
 router.use(authorize('learner'));
 
 // @route   GET /api/learners/dashboard
-// @desc    Get learner dashboard data
+// @desc    Get learner dashboard data with ML risk assessment
 // @access  Private (Learner only)
 router.get('/dashboard', async (req, res) => {
   try {
@@ -31,6 +35,18 @@ router.get('/dashboard', async (req, res) => {
       .limit(10)
       .populate('courseId', 'title');
 
+    // Get ML risk assessment
+    let riskAssessment = null;
+    try {
+      const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict`, {
+        learner_id: learner._id.toString()
+      });
+      riskAssessment = mlResponse.data;
+    } catch (mlError) {
+      console.error('ML risk assessment failed:', mlError.message);
+      // Continue without ML data
+    }
+
     // Calculate dashboard metrics
     const dashboardData = {
       profile: {
@@ -42,6 +58,7 @@ router.get('/dashboard', async (req, res) => {
       enrollments: learner.enrollments,
       recentActivities,
       achievements: learner.achievements,
+      riskAssessment, // Include ML risk assessment
       stats: {
         totalCourses: learner.enrollments.length,
         activeCourses: learner.enrollments.filter(e => e.status === 'active').length,

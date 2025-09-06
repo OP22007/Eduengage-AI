@@ -7,6 +7,7 @@ import { adminAPI } from '@/lib/api'
 import EngagementChart from '@/components/charts/EngagementChart'
 import RiskDistributionChart from '@/components/charts/RiskDistributionChart'
 import InterventionModal from '@/components/InterventionModal'
+import MLInsights from '@/components/MLInsights'
 import { 
   Users, 
   BookOpen, 
@@ -213,6 +214,10 @@ export default function AdminDashboard() {
             <BarChart3 className="h-4 w-4 mr-2" />
             Export Report
           </Button>
+          <Button variant="outline" onClick={() => window.location.href = '/ml-analytics'}>
+            <Brain className="h-4 w-4 mr-2" />
+            AI Analytics
+          </Button>
           <Button>
             <MessageSquare className="h-4 w-4 mr-2" />
             Send Interventions
@@ -256,6 +261,9 @@ export default function AdminDashboard() {
           </Card>
         ))}
       </div>
+
+      {/* AI Model Status & Real-time Predictions */}
+      <MLInsights showBatchPredictions={true} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Risk Distribution Chart */}
