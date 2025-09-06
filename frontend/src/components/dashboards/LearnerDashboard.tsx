@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { learnerAPI } from '@/lib/api'
 import ProgressChart from '@/components/charts/ProgressChart'
-import MLInsights from '@/components/MLInsights'
 import { 
   TrendingUp, 
   Book, 
@@ -24,7 +23,6 @@ import {
 import { formatPercentage, formatDuration, cn } from '@/lib/utils'
 
 interface DashboardData {
-  learnerId?: string
   profile: {
     name: string
     email: string
@@ -55,7 +53,6 @@ interface DashboardData {
     completedCourses: number
     averageProgress: number
   }
-  riskAssessment?: any
 }
 
 export default function LearnerDashboard() {
@@ -202,11 +199,6 @@ export default function LearnerDashboard() {
         ))}
       </div>
 
-      {/* AI Risk Assessment for this learner */}
-      {dashboardData.learnerId && (
-        <MLInsights learnerId={dashboardData.learnerId} />
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Course Progress with Chart */}
         <Card className="lg:col-span-2">
@@ -223,8 +215,8 @@ export default function LearnerDashboard() {
             {enrollments.length > 0 ? (
               <div className="space-y-6">
                 <ProgressChart 
-                  data={enrollments.map(enrollment => ({
-                    courseTitle: enrollment.courseId.title,
+                  data={enrollments.filter(enrollment => enrollment.courseId).map(enrollment => ({
+                    courseTitle: enrollment.courseId.title || 'Unknown Course',
                     progress: enrollment.progress,
                     riskScore: enrollment.riskScore,
                     status: enrollment.status
@@ -232,11 +224,11 @@ export default function LearnerDashboard() {
                 />
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {enrollments.slice(0, 3).map((enrollment, index) => (
+                  {enrollments.filter(enrollment => enrollment.courseId).slice(0, 3).map((enrollment, index) => (
                     <div key={index} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium text-gray-900 text-sm truncate">
-                          {enrollment.courseId.title}
+                          {enrollment.courseId?.title || 'Unknown Course'}
                         </h4>
                         <span className="text-lg font-semibold text-gray-900">
                           {formatPercentage(enrollment.progress)}

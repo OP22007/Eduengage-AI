@@ -11,8 +11,10 @@ import logging
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging    except Exception as e:
+        logger.error(f"❌ Error extracting features for learner {learner_id_str}: {e}")
+        return None
+    # Note: No finally block needed since we're using connection poolinggging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load trained model components
@@ -34,16 +36,61 @@ except Exception as e:
     feature_columns = None
     model_info = None
 
-def connect_to_mongodb():
-    """Connect to MongoDB database"""
-    mongo_uri = "mongodb+srv://IronMan:KYX74hO9EjVW4xzq@bitsbids.vdpghuh.mongodb.net/upgrad"
-    client = pymongo.MongoClient(mongo_uri)
-    return client.upgrad
+# Global MongoDB client and connection pool
+mongo_client = None
+db = None
+
+def initialize_mongodb():
+    """Initialize MongoDB connection with proper connection pooling"""
+    global mongo_client, db
+    try:
+        mongo_uri = "mongodb+srv://IronMan:KYX74hO9EjVW4xzq@bitsbids.vdpghuh.mongodb.net/upgrad"
+        
+        # Create client with connection pooling
+        mongo_client = pymongo.MongoClient(
+            mongo_uri,
+            maxPoolSize=50,
+            minPoolSize=5,
+            maxIdleTimeMS=30000,
+            waitQueueTimeoutMS=5000,
+            serverSelectionTimeoutMS=10000,
+            socketTimeoutMS=20000,
+        )
+        
+        db = mongo_client.upgrad
+        
+        # Test the connection
+        db.command('ping')
+        logger.info("✅ MongoDB connection pool initialized successfully")
+        return db
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize MongoDB: {e}")
+        return None
+
+def get_database():
+    """Get database connection from pool (thread-safe)"""
+    global db
+    if db is None:
+        db = initialize_mongodb()
+    return db
+
+def close_mongodb_connection():
+    """Properly close MongoDB connection"""
+    global mongo_client
+    if mongo_client:
+        mongo_client.close()
+        logger.info("🔒 MongoDB connection closed")
+
+# Initialize MongoDB on startup
+initialize_mongodb()
 
 def extract_learner_features(learner_id_str):
     """Extract comprehensive features for a specific learner"""
+    db_conn = None
     try:
-        db = connect_to_mongodb()
+        db_conn = get_database()
+        if not db_conn:
+            return None
         
         # Convert string ID to ObjectId if needed
         try:
@@ -52,17 +99,17 @@ def extract_learner_features(learner_id_str):
                 learner_id = ObjectId(learner_id_str)
             else:
                 learner_id = learner_id_str
-        except:
+        except Exception:
             learner_id = learner_id_str
         
         # Get learner data
-        learner = db.learners.find_one({'_id': learner_id})
+        learner = db_conn.learners.find_one({'_id': learner_id})
         if not learner:
             return None
         
         user_id = learner.get('userId')
-        user = db.users.find_one({'_id': user_id}) if user_id else {}
-        activities = list(db.activities.find({'learnerId': learner_id}))
+        user = db_conn.users.find_one({'_id': user_id}) if user_id else {}
+        activities = list(db_conn.activities.find({'learnerId': learner_id}))
         
         now = datetime.now()
         
@@ -245,6 +292,10 @@ def extract_learner_features(learner_id_str):
     except Exception as e:
         logger.error(f"Error extracting features for learner {learner_id_str}: {e}")
         return None
+
+# Cleanup on app shutdown
+import atexit
+atexit.register(close_mongodb_connection)
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -494,4 +545,13 @@ def analyze_learner(learner_id):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    try:
+        logger.info("🚀 Starting ML service...")
+        app.run(host='0.0.0.0', port=8000, debug=True)
+    except KeyboardInterrupt:
+        logger.info("👋 Shutting down ML service...")
+        close_mongodb_connection()
+    except Exception as e:
+        logger.error(f"❌ ML service error: {e}")
+        close_mongodb_connection()
+        raise

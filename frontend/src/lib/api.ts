@@ -59,16 +59,18 @@ export const adminAPI = {
   getLearners: (params?: any) => api.get('/admin/learners', { params }),
   getAnalytics: (params?: any) => api.get('/admin/analytics', { params }),
   createIntervention: (data: any) => api.post('/admin/intervention', data),
-  getMlPrediction: (learnerId: string) => api.post('/admin/ml-prediction', { learnerId }),
 }
 
-// Analytics API
-export const analyticsAPI = {
-  getOverview: () => api.get('/analytics/overview'),
-  predictRisk: (learnerId: string) => api.post('/analytics/predict-risk', { learner_id: learnerId }),
-  predictBatch: (learnerIds: string[]) => api.post('/analytics/predict-batch', { learner_ids: learnerIds }),
-  getLearnerAnalysis: (learnerId: string) => api.get(`/analytics/learner/${learnerId}/analysis`),
-  getMlStatus: () => api.get('/analytics/ml-status'),
+// Courses API
+export const coursesAPI = {
+  getCourses: (params?: any) => api.get('/courses', { params }),
+  getEnrolledCourses: () => api.get('/courses/enrolled'),
+  getAvailableCourses: () => api.get('/courses/available'),
+  getCourse: (id: string) => api.get(`/courses/${id}`),
+  getCourseModules: (id: string) => api.get(`/courses/${id}/modules`),
+  enrollInCourse: (id: string) => api.post(`/courses/${id}/enroll`),
+  updateProgress: (id: string, data: any) => api.post(`/courses/${id}/progress`, data),
+  getCategories: () => api.get('/courses/categories'),
 }
 
 export default api

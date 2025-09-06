@@ -23,13 +23,34 @@ class EngagementRiskPredictor:
         self.model = None
         self.scaler = None
         self.feature_columns = None
+        self.client = None
         
     def connect_to_mongodb(self):
-        """Connect to MongoDB database"""
+        """Connect to MongoDB database with proper connection handling"""
         print("Connecting to MongoDB...")
-        client = pymongo.MongoClient(self.mongo_uri)
-        self.db = client.upgrad
-        print(f"Connected! Collections: {self.db.list_collection_names()}")
+        try:
+            self.client = pymongo.MongoClient(
+                self.mongo_uri,
+                maxPoolSize=50,
+                minPoolSize=5,
+                maxIdleTimeMS=30000,
+                waitQueueTimeoutMS=5000,
+                serverSelectionTimeoutMS=10000,
+                socketTimeoutMS=20000,
+            )
+            self.db = self.client.upgrad
+            # Test connection
+            self.db.command('ping')
+            print(f"Connected! Collections: {self.db.list_collection_names()}")
+        except Exception as e:
+            print(f"❌ MongoDB connection failed: {e}")
+            raise
+    
+    def close_connection(self):
+        """Properly close MongoDB connection"""
+        if self.client:
+            self.client.close()
+            print("🔒 MongoDB connection closed")
         
     def extract_comprehensive_features(self):
         """
@@ -438,6 +459,13 @@ if __name__ == "__main__":
     print("=" * 80)
     
     predictor = EngagementRiskPredictor()
-    model, scaler, features = predictor.train_models()
     
-    print("\\n🎯 Training Complete! Ready for production deployment.")
+    try:
+        model, scaler, features = predictor.train_models()
+        print("\n🎯 Training Complete! Ready for production deployment.")
+    except Exception as e:
+        print(f"❌ Training failed: {e}")
+        raise
+    finally:
+        # Ensure connection is properly closed
+        predictor.close_connection()
