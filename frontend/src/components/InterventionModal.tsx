@@ -33,9 +33,10 @@ interface InterventionModalProps {
   }
   onClose: () => void
   onSuccess: () => void
+  onNotificationSent?: (type: 'email' | 'sms', recipient: string, interventionType: string) => void
 }
 
-export default function InterventionModal({ learner, onClose, onSuccess }: InterventionModalProps) {
+export default function InterventionModal({ learner, onClose, onSuccess, onNotificationSent }: InterventionModalProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [interventionData, setInterventionData] = useState({
@@ -91,17 +92,38 @@ P.S. You're just ${Math.round((1 - (riskyCourse?.riskScore || 0)) * 100)}% away 
     setIsSending(true)
     
     try {
-      await adminAPI.createIntervention({
+      const response = await adminAPI.createIntervention({
         learnerId: learner._id,
         type: interventionData.type,
         trigger: 'manual_admin',
         content: {
           subject: interventionData.subject,
-          body: interventionData.content,
-          callToAction: 'Continue Learning'
+          message: interventionData.content,
+          actionButton: {
+            text: 'Continue Learning',
+            url: '/dashboard'
+          }
         },
         scheduling: interventionData.scheduling
       })
+      
+      // Determine risk level for notification channels
+      const avgRiskScore = learner.enrollments.reduce((sum, e) => sum + e.riskScore, 0) / learner.enrollments.length
+      const riskLevel = avgRiskScore > 0.7 ? 'high' : avgRiskScore > 0.4 ? 'medium' : 'low'
+      
+      // Simulate sending notifications based on risk level
+      if (onNotificationSent) {
+        // High risk: Email + SMS + In-app
+        if (riskLevel === 'high') {
+          onNotificationSent('email', learner.userId.email, interventionData.type)
+          setTimeout(() => onNotificationSent?.('sms', 'phone number', interventionData.type), 500)
+        } 
+        // Medium risk: Email + In-app
+        else if (riskLevel === 'medium') {
+          onNotificationSent('email', learner.userId.email, interventionData.type)
+        }
+        // Low risk: Just in-app (handled by server)
+      }
       
       onSuccess()
       onClose()

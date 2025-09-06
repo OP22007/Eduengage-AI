@@ -95,11 +95,16 @@ export const analyticsAPI = {
 
 // Notifications API
 export const notificationsAPI = {
-  getNotifications: () => api.get('/notifications'),
-  markAsRead: (notificationId: string) => api.patch(`/notifications/${notificationId}/read`),
-  markAllAsRead: () => api.patch('/notifications/mark-all-read'),
-  sendIntervention: (data: { learnerId: string, interventionType: string, message: string }) => 
+  getNotifications: (params?: any) => api.get('/notifications', { params }),
+  markAsRead: (notificationId: string) => api.post(`/notifications/${notificationId}/read`),
+  markAllAsRead: () => api.post('/notifications/mark-all-read'),
+  trackClick: (notificationId: string) => api.post(`/notifications/${notificationId}/click`),
+  dismiss: (notificationId: string) => api.delete(`/notifications/${notificationId}`),
+  sendIntervention: (data: { learnerId: string, interventionType: string, message: string, riskLevel?: string }) => 
     api.post('/notifications/send-intervention', data),
+  getStats: (days?: number) => api.get('/notifications/stats', { params: { days } }),
+  testRiskSystem: () => api.post('/notifications/test-risk-system'),
+  processRiskNotifications: () => api.post('/notifications/process-risk-notifications'),
 }
 
 // Achievements API

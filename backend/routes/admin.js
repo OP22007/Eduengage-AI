@@ -209,6 +209,7 @@ router.post('/intervention', async (req, res) => {
   try {
     const { learnerId, type, trigger, content, scheduling } = req.body;
 
+    // Create intervention record
     const intervention = new Intervention({
       learnerId,
       type,
@@ -222,12 +223,52 @@ router.post('/intervention', async (req, res) => {
 
     await intervention.save();
 
-    // Here you would trigger the actual intervention
-    // (email, notification, etc.)
+    // Get learner and user details for notification
+    const Learner = require('../models/Learner');
+    const learner = await Learner.findById(learnerId).populate('userId');
+    
+    if (learner && learner.userId) {
+      // Import notification service
+      const notificationService = require('../services/notificationService');
+      
+      // Create in-app notification for the learner
+      await notificationService.sendInAppNotification({
+        userId: learner.userId._id,
+        learnerId: learnerId,
+        type: 'admin-intervention',
+        title: content.subject || 'Message from Instructor',
+        message: content.message || content.body || 'You have received a personalized message from your instructor.',
+        priority: 'high',
+        actionRequired: true,
+        data: {
+          interventionId: intervention._id,
+          interventionType: type,
+          sentBy: req.user._id,
+          sentByRole: req.user.role || 'admin',
+          scheduledFor: scheduling?.scheduledFor
+        }
+      });
+
+      // Also trigger risk-based notifications if applicable
+      try {
+        // Calculate learner's current risk level
+        const activeEnrollments = learner.enrollments.filter(e => e.status === 'active');
+        if (activeEnrollments.length > 0) {
+          const avgRiskScore = activeEnrollments.reduce((sum, e) => sum + (e.riskScore || 0), 0) / activeEnrollments.length;
+          const riskLevel = avgRiskScore > 0.7 ? 'high' : avgRiskScore > 0.4 ? 'medium' : 'low';
+          
+          // Send risk-based notification (email/SMS based on risk level)
+          await notificationService.sendRiskBasedNotification(learnerId, riskLevel, avgRiskScore);
+        }
+      } catch (riskError) {
+        console.error('Error sending risk-based notification:', riskError);
+        // Don't fail the intervention if risk notification fails
+      }
+    }
 
     res.json({
       success: true,
-      message: 'Intervention scheduled successfully',
+      message: 'Intervention sent successfully and notification created',
       data: intervention
     });
   } catch (error) {
@@ -235,6 +276,85 @@ router.post('/intervention', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error creating intervention'
+    });
+  }
+});
+
+// @route   POST /api/admin/test-intervention
+// @desc    Test intervention creation and notification flow
+// @access  Private (Admin/Instructor only)
+router.post('/test-intervention', async (req, res) => {
+  try {
+    const { learnerId } = req.body;
+    
+    if (!learnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Learner ID is required'
+      });
+    }
+
+    // Get learner details
+    const Learner = require('../models/Learner');
+    const learner = await Learner.findById(learnerId).populate('userId');
+    
+    if (!learner) {
+      return res.status(404).json({
+        success: false,
+        message: 'Learner not found'
+      });
+    }
+
+    // Create test intervention
+    const intervention = new Intervention({
+      learnerId,
+      type: 'personalized_nudge',
+      trigger: 'manual_admin',
+      content: {
+        subject: 'Test Intervention',
+        message: 'This is a test intervention to verify the notification system is working properly.'
+      },
+      scheduling: {
+        immediate: true,
+        scheduledFor: new Date()
+      }
+    });
+
+    await intervention.save();
+
+    // Create notification
+    const notificationService = require('../services/notificationService');
+    const notificationResult = await notificationService.sendInAppNotification({
+      userId: learner.userId._id,
+      learnerId: learnerId,
+      type: 'admin-intervention',
+      title: 'Test Message from Instructor',
+      message: 'This is a test intervention to verify the notification system is working properly.',
+      priority: 'medium',
+      actionRequired: true,
+      data: {
+        interventionId: intervention._id,
+        interventionType: 'personalized_nudge',
+        sentBy: req.user._id,
+        sentByRole: req.user.role || 'admin',
+        isTest: true
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Test intervention sent successfully',
+      data: {
+        intervention,
+        notification: notificationResult
+      }
+    });
+  } catch (error) {
+    console.error('Test intervention error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error creating test intervention',
+      error: error.message
     });
   }
 });

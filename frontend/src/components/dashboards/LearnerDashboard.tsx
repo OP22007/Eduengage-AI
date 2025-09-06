@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { learnerAPI } from '@/lib/api'
 import MLInsights from '@/components/MLInsights'
+import NotificationDisplay from '@/components/NotificationDisplay'
 import { 
   TrendingUp, 
   Book, 
@@ -21,7 +22,8 @@ import {
   Star,
   BarChart3,
   Settings,
-  Activity
+  Activity,
+  Bell
 } from 'lucide-react'
 import { formatPercentage, formatDuration, cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -113,6 +115,7 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'courses', label: 'My Courses', icon: Book },
   { id: 'ai-insights', label: 'AI Coach', icon: Brain },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'community', label: 'Community', icon: Users },
   { id: 'progress', label: 'Analytics', icon: Activity }
 ]
@@ -1176,6 +1179,18 @@ export default function LearnerDashboard() {
     </div>
   )
 
+  const renderNotificationsTab = () => (
+    <div className="space-y-6">
+      <div className="max-w-4xl">
+        <NotificationDisplay 
+          showCount={20}
+          autoRefresh={true}
+          refreshInterval={30000}
+        />
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
@@ -1234,6 +1249,7 @@ export default function LearnerDashboard() {
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'courses' && renderCoursesTab()}
         {activeTab === 'ai-insights' && renderAIInsightsTab()}
+        {activeTab === 'notifications' && renderNotificationsTab()}
         {activeTab === 'community' && renderCommunityTab()}
         {activeTab === 'progress' && renderAnalyticsTab()}
       </div>

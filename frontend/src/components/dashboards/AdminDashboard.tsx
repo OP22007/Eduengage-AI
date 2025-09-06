@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { adminAPI } from '@/lib/api'
 import EngagementChart from '@/components/charts/EngagementChart'
 import RiskDistributionChart from '@/components/charts/RiskDistributionChart'
-import InterventionModal from '@/components/InterventionModal'
+import InterventionModal from '../InterventionModal'
+import NotificationPopup, { useNotificationPopup } from '../NotificationPopup'
 import AdminGeminiInsights from '@/components/AdminGeminiInsights'
 import { 
   Users, 
@@ -104,6 +105,16 @@ export default function AdminDashboard() {
   const [successMessage, setSuccessMessage] = useState('')
   const [selectedLearner, setSelectedLearner] = useState<any>(null)
   const [showInterventionModal, setShowInterventionModal] = useState(false)
+  
+  // Notification popup hook
+  const { 
+    messages: popupMessages, 
+    removeMessage, 
+    showEmailSent, 
+    showSMSSent, 
+    showInterventionSent,
+    showError: showPopupError
+  } = useNotificationPopup()
 
   useEffect(() => {
     fetchDashboardData()
@@ -150,6 +161,14 @@ export default function AdminDashboard() {
   const handleInterventionClick = (learner: any) => {
     setSelectedLearner(learner)
     setShowInterventionModal(true)
+  }
+
+  const handleNotificationSent = (type: 'email' | 'sms', recipient: string, interventionType: string) => {
+    if (type === 'email') {
+      showEmailSent(recipient)
+    } else if (type === 'sms') {
+      showSMSSent(recipient)
+    }
   }
 
   const handleInterventionSuccess = () => {
@@ -685,8 +704,16 @@ export default function AdminDashboard() {
           learner={selectedLearner}
           onClose={() => setShowInterventionModal(false)}
           onSuccess={handleInterventionSuccess}
+          onNotificationSent={handleNotificationSent}
         />
       )}
+
+      {/* Notification Popups */}
+      <NotificationPopup
+        messages={popupMessages}
+        onClose={removeMessage}
+        position="top-right"
+      />
     </div>
   )
 }

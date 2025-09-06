@@ -22,7 +22,9 @@ const interventionSchema = new mongoose.Schema({
       'resource_recommendation',
       'deadline_warning',
       'achievement_celebration',
-      'progress_milestone'
+      'progress_milestone',
+      'personalized_nudge',
+      'manual_intervention'
     ],
     required: true
   },
@@ -38,7 +40,9 @@ const interventionSchema = new mongoose.Schema({
       'goal_achievement',
       'streak_milestone',
       'peer_activity',
-      'course_completion'
+      'course_completion',
+      'manual_admin',
+      'manual_instructor'
     ],
     required: true
   },

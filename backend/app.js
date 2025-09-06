@@ -14,6 +14,7 @@ const achievementsRoutes = require('./routes/achievements');
 
 // Import risk tracking scheduler
 const { initializeRiskScheduler } = require('./scripts/dailyRiskUpdate');
+const { initializeNotificationScheduler } = require('./scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -209,5 +210,17 @@ const server = app.listen(PORT, async () => {
     } catch (error) {
       console.error('❌ Failed to initialize risk scheduler:', error);
     }
+  }
+
+  // Initialize notification scheduler
+  if (process.env.ENABLE_NOTIFICATION_SCHEDULER !== 'false') {
+    try {
+      initializeNotificationScheduler();
+      console.log('✅ Notification scheduler initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize notification scheduler:', error);
+    }
+  } else {
+    console.log('ℹ️ Notification scheduler disabled (set ENABLE_NOTIFICATION_SCHEDULER=true to enable)');
   }
 });
