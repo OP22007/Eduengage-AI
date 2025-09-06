@@ -1,4 +1,5 @@
 const axios = require('axios');
+const geminiService = require('./geminiService');
 
 class MLService {
   constructor(mlServiceUrl = 'http://localhost:8000') {
@@ -6,6 +7,13 @@ class MLService {
   }
 
   async isHealthy() {
+    // Check Gemini service health first
+    const geminiHealthy = await geminiService.isHealthy();
+    if (geminiHealthy) {
+      return true;
+    }
+
+    // Fallback to original ML service
     try {
       const response = await axios.get(`${this.mlServiceUrl}/health`, { timeout: 5000 });
       return response.data.status === 'ok';
@@ -17,6 +25,27 @@ class MLService {
 
   async predictRisk(learnerData) {
     try {
+      // Use Gemini service for risk prediction
+      const geminiResult = await geminiService.analyzeLearnerRisk(learnerData);
+      
+      if (geminiResult.success) {
+        return {
+          success: true,
+          data: {
+            risk_score: geminiResult.data.risk_score,
+            risk_class: geminiResult.data.risk_score > 0.5 ? 1 : 0,
+            risk_level: geminiResult.data.risk_level,
+            risk_factors: geminiResult.data.risk_factors,
+            recommendations: geminiResult.data.recommendations,
+            explanation: geminiResult.data.explanation,
+            confidence: geminiResult.data.confidence,
+            model_status: geminiResult.data.model_status,
+            ai_powered: true
+          }
+        };
+      }
+
+      // Fallback to original ML service
       const response = await axios.post(`${this.mlServiceUrl}/predict`, learnerData, {
         timeout: 10000,
         headers: { 'Content-Type': 'application/json' }
@@ -27,9 +56,9 @@ class MLService {
         data: response.data
       };
     } catch (error) {
-      console.error('ML prediction failed:', error.message);
+      console.error('AI prediction failed:', error.message);
       
-      // Fallback to heuristic risk calculation
+      // Ultimate fallback to heuristic calculation
       return {
         success: false,
         data: this.calculateFallbackRisk(learnerData),
@@ -40,19 +69,20 @@ class MLService {
 
   async batchPredict(learnersData) {
     try {
-      const response = await axios.post(`${this.mlServiceUrl}/batch_predict`, {
-        learners: learnersData
-      }, {
-        timeout: 30000,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // Use Gemini for batch predictions
+      const predictions = await Promise.all(
+        learnersData.map(async (learnerData) => {
+          const result = await geminiService.analyzeLearnerRisk(learnerData);
+          return result.success ? result.data : this.calculateFallbackRisk(learnerData);
+        })
+      );
       
       return {
         success: true,
-        data: response.data.predictions
+        data: predictions
       };
     } catch (error) {
-      console.error('ML batch prediction failed:', error.message);
+      console.error('Batch prediction failed:', error.message);
       
       // Fallback to individual predictions
       const predictions = learnersData.map(data => this.calculateFallbackRisk(data));
@@ -60,6 +90,60 @@ class MLService {
         success: false,
         data: predictions,
         fallback: true
+      };
+    }
+  }
+
+  async getPersonalizedRecommendations(learnerData) {
+    try {
+      const result = await geminiService.generatePersonalizedRecommendations(learnerData);
+      return result;
+    } catch (error) {
+      console.error('Failed to get personalized recommendations:', error.message);
+      return {
+        success: false,
+        data: {
+          study_schedule: { optimal_time: 'evening', session_duration: '45 minutes', frequency: 'daily' },
+          learning_path: [{ action: 'Complete next module', priority: 'high', reason: 'Maintain momentum' }],
+          motivation: { strength: 'Consistent learner', encouragement: 'Keep going!' },
+          resources: []
+        }
+      };
+    }
+  }
+
+  async getAdminInsights(platformData) {
+    try {
+      const result = await geminiService.generateAdminInsights(platformData);
+      return result;
+    } catch (error) {
+      console.error('Failed to get admin insights:', error.message);
+      return {
+        success: false,
+        data: {
+          overall_health: { score: 75, status: 'good', summary: 'Platform operating normally' },
+          key_insights: [],
+          intervention_priorities: [],
+          recommendations: []
+        }
+      };
+    }
+  }
+
+  async getInterventionSuggestions(learnerData, riskLevel) {
+    try {
+      const result = await geminiService.generateInterventionSuggestions(learnerData, riskLevel);
+      return result;
+    } catch (error) {
+      console.error('Failed to get intervention suggestions:', error.message);
+      return {
+        success: false,
+        data: {
+          immediate_actions: [],
+          follow_up_actions: [],
+          success_metrics: [],
+          escalation_plan: {}
+        }
       };
     }
   }

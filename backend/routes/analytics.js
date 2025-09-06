@@ -3,17 +3,16 @@ const axios = require('axios');
 const { auth } = require('../middleware/auth');
 const Learner = require('../models/Learner');
 const Activity = require('../models/Activity');
+const mlService = require('../services/mlService');
+const geminiService = require('../services/geminiService');
 
 const router = express.Router();
-
-// ML Service configuration
-const ML_SERVICE_URL = 'http://localhost:8000';
 
 // All analytics routes require authentication
 router.use(auth);
 
 // @route   GET /api/analytics/overview
-// @desc    Get platform overview analytics
+// @desc    Get platform overview analytics with Gemini insights
 // @access  Private
 router.get('/overview', async (req, res) => {
   try {
@@ -66,6 +65,30 @@ router.get('/overview', async (req, res) => {
     
     const stats = engagementStats[0] || {};
     
+    // Prepare data for Gemini insights
+    const platformData = {
+      totalLearners,
+      activeToday: recentActivities,
+      totalActivities,
+      highRisk: highRiskCount,
+      mediumRisk: mediumRiskCount,
+      lowRisk: lowRiskCount,
+      avgSessionTime: 45, // placeholder
+      completionRate: stats.avgCompletionRate || 0,
+      weeklyGrowth: 12.5 // placeholder
+    };
+
+    // Get AI-powered admin insights
+    let adminInsights = null;
+    try {
+      const insightsResult = await mlService.getAdminInsights(platformData);
+      if (insightsResult.success) {
+        adminInsights = insightsResult.data;
+      }
+    } catch (error) {
+      console.error('Failed to get admin insights:', error);
+    }
+    
     res.json({
       success: true,
       data: {
@@ -87,7 +110,8 @@ router.get('/overview', async (req, res) => {
           weeklyActivityGrowth: 12.5, // Placeholder
           engagementRate: 78.3, // Placeholder
           retentionRate: 85.2 // Placeholder
-        }
+        },
+        aiInsights: adminInsights // Gemini-powered insights
       }
     });
   } catch (error) {
@@ -100,7 +124,7 @@ router.get('/overview', async (req, res) => {
 });
 
 // @route   POST /api/analytics/predict-risk
-// @desc    Get ML risk prediction for a learner (accepts userId or learnerId)
+// @desc    Get Gemini AI risk prediction for a learner
 // @access  Private
 router.post('/predict-risk', async (req, res) => {
   try {
@@ -130,41 +154,54 @@ router.post('/predict-risk', async (req, res) => {
       learner_id = learner._id.toString();
     }
     
-    // Call ML service
-    const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict`, {
-      learner_id
-    });
+    // Get comprehensive learner data for Gemini analysis
+    const learner = await Learner.findById(learner_id).populate('userId');
+    const activities = await Activity.find({ learnerId: learner_id }).sort({ timestamp: -1 }).limit(50);
     
-    res.json({
-      success: true,
-      data: mlResponse.data
-    });
+    const learnerData = {
+      learner,
+      user: learner.userId,
+      activities
+    };
     
-  } catch (error) {
-    console.error('ML prediction error:', error);
+    // Get Gemini AI-powered risk prediction
+    const prediction = await geminiService.analyzeLearnerRisk(learnerData);
     
-    if (error.response) {
-      // ML service returned an error
-      return res.status(error.response.status).json({
+    if (prediction.success) {
+      res.json({
+        success: true,
+        data: {
+          ...prediction.data,
+          ai_powered: true,
+          ai_provider: 'gemini',
+          service: 'gemini'
+        }
+      });
+    } else {
+      res.json({
         success: false,
-        message: error.response.data.error || 'ML service error'
+        data: prediction.data,
+        message: 'Using fallback prediction due to AI service unavailability'
       });
     }
     
+  } catch (error) {
+    console.error('AI prediction error:', error);
+    
     res.status(500).json({
       success: false,
-      message: 'Error connecting to ML service'
+      message: 'Error connecting to AI service'
     });
   }
 });
 
 // @route   GET /api/analytics/predict-risk/me
-// @desc    Get ML risk prediction for current user
+// @desc    Get Gemini AI risk prediction for current user with personalized recommendations
 // @access  Private
 router.get('/predict-risk/me', async (req, res) => {
   try {
     // Find learner for current user
-    const learner = await Learner.findOne({ userId: req.user._id });
+    const learner = await Learner.findOne({ userId: req.user._id }).populate('userId');
     if (!learner) {
       return res.status(404).json({
         success: false,
@@ -172,33 +209,81 @@ router.get('/predict-risk/me', async (req, res) => {
       });
     }
     
-    // Call ML service
-    const mlResponse = await axios.post(`${ML_SERVICE_URL}/predict`, {
-      learner_id: learner._id.toString()
-    });
+    // Get recent activities
+    const activities = await Activity.find({ learnerId: learner._id }).sort({ timestamp: -1 }).limit(50);
+    
+    const learnerData = {
+      learner,
+      user: learner.userId,
+      activities
+    };
+    
+    // Get Gemini AI-powered risk prediction and recommendations
+    const [prediction, recommendations] = await Promise.all([
+      geminiService.analyzeLearnerRisk(learnerData),
+      geminiService.generatePersonalizedRecommendations(learnerData)
+    ]);
     
     res.json({
       success: true,
       data: {
-        ...mlResponse.data,
-        learner_name: learner.name,
-        user_id: req.user._id
+        riskAssessment: prediction.success ? prediction.data : null,
+        personalizedRecommendations: recommendations.success ? recommendations.data : null,
+        learner_name: learner.userId.profile.name,
+        user_id: req.user._id,
+        ai_powered: true
       }
     });
     
   } catch (error) {
-    console.error('ML prediction error:', error);
-    
-    if (error.response) {
-      return res.status(error.response.status).json({
-        success: false,
-        message: error.response.data.error || 'ML service error'
-      });
-    }
+    console.error('Personal AI analysis error:', error);
     
     res.status(500).json({
       success: false,
-      message: 'Error connecting to ML service'
+      message: 'Error connecting to AI service'
+    });
+  }
+});
+
+// @route   POST /api/analytics/intervention-suggestions
+// @desc    Get AI-powered intervention suggestions for at-risk learners
+// @access  Private
+router.post('/intervention-suggestions', async (req, res) => {
+  try {
+    const { learner_id, risk_level } = req.body;
+    
+    if (!learner_id || !risk_level) {
+      return res.status(400).json({
+        success: false,
+        message: 'learner_id and risk_level are required'
+      });
+    }
+    
+    // Get learner data
+    const learner = await Learner.findById(learner_id).populate('userId');
+    const activities = await Activity.find({ learnerId: learner_id }).sort({ timestamp: -1 }).limit(20);
+    
+    const learnerData = {
+      learner,
+      user: learner.userId,
+      activities
+    };
+    
+    // Get AI-powered intervention suggestions
+    const suggestions = await mlService.getInterventionSuggestions(learnerData, risk_level);
+    
+    res.json({
+      success: true,
+      data: suggestions.data,
+      ai_powered: suggestions.success
+    });
+    
+  } catch (error) {
+    console.error('Intervention suggestions error:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error generating intervention suggestions'
     });
   }
 });

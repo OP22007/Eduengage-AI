@@ -12,6 +12,9 @@ const coursesRoutes = require('./routes/courses');
 const notificationsRoutes = require('./routes/notifications');
 const achievementsRoutes = require('./routes/achievements');
 
+// Import risk tracking scheduler
+const { initializeRiskScheduler } = require('./scripts/dailyRiskUpdate');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -193,8 +196,18 @@ process.on('unhandledRejection', (reason, promise) => {
   gracefulShutdown('UNHANDLED_REJECTION');
 });
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  
+  // Initialize risk tracking scheduler after server starts
+  if (process.env.ENABLE_RISK_SCHEDULER !== 'false') {
+    try {
+      await initializeRiskScheduler();
+      console.log('✅ Risk tracking scheduler initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize risk scheduler:', error);
+    }
+  }
 });

@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  timeout: 10000,
+  timeout: 60000, // Increased to 60 seconds for AI operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -51,6 +51,8 @@ export const learnerAPI = {
   getProgress: () => api.get('/learners/progress'),
   getAchievements: () => api.get('/learners/achievements'),
   logActivity: (data: any) => api.post('/learners/activity', data),
+  getAIRecommendations: () => api.get('/learners/ai-recommendations'),
+  getRiskAssessment: () => api.get('/learners/risk-assessment'),
 }
 
 // Admin API
@@ -59,6 +61,12 @@ export const adminAPI = {
   getLearners: (params?: any) => api.get('/admin/learners', { params }),
   getAnalytics: (params?: any) => api.get('/admin/analytics', { params }),
   createIntervention: (data: any) => api.post('/admin/intervention', data),
+  getGeminiInsights: () => api.get('/admin/gemini-insights', { timeout: 120000 }), // 2 minutes for AI processing
+  getInterventionSuggestions: (learnerId: string) => 
+    api.post('/admin/intervention-suggestions', { learnerId }, { timeout: 60000 }), // 1 minute for interventions
+  updateRiskScores: () => api.post('/admin/update-risk-scores', {}, { timeout: 180000 }), // 3 minutes for risk updates
+  getRiskHistory: (params?: any) => api.get('/admin/risk-history', { params }),
+  getLearnerRisk: (learnerId: string) => api.get(`/admin/learner-risk/${learnerId}`),
 }
 
 // Courses API
