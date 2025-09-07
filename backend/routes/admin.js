@@ -235,7 +235,7 @@ router.post('/intervention', async (req, res) => {
       await notificationService.sendInAppNotification({
         userId: learner.userId._id,
         learnerId: learnerId,
-        type: 'admin-intervention',
+        type: 'learning-support',
         title: content.subject || 'Message from Instructor',
         message: content.message || content.body || 'You have received a personalized message from your instructor.',
         priority: 'high',
@@ -327,7 +327,7 @@ router.post('/test-intervention', async (req, res) => {
     const notificationResult = await notificationService.sendInAppNotification({
       userId: learner.userId._id,
       learnerId: learnerId,
-      type: 'admin-intervention',
+      type: 'learning-support',
       title: 'Test Message from Instructor',
       message: 'This is a test intervention to verify the notification system is working properly.',
       priority: 'medium',
