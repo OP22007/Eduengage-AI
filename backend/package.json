@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "seed": "node scripts/generateMockData.js"
+    "seed": "node scripts/generateMockData.js",
+    "build": "echo 'No build needed for Node.js app'"
   },
   "dependencies": {
     "@faker-js/faker": "^8.0.2",

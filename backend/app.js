@@ -21,7 +21,12 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'], // Frontend URLs
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:3001',
+    process.env.FRONTEND_URL,
+    'https://your-frontend-domain.vercel.app' // Replace with your actual frontend URL
+  ].filter(Boolean), // Remove undefined values
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
-import { Eye, EyeOff, BookOpen, Users, TrendingUp, Shield } from 'lucide-react'
+import { Eye, EyeOff, BookOpen, Users, Shield, BarChart } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -36,8 +36,7 @@ export default function LoginPage() {
 
   const demoAccounts = [
     { email: 'admin@demo.com', password: 'admin123', role: 'Admin', icon: Shield },
-    { email: 'learner1@demo.com', password: 'learner123', role: 'High-Risk Learner', icon: TrendingUp },
-    { email: 'learner2@demo.com', password: 'learner123', role: 'Successful Learner', icon: Users },
+    { email: 'learner@demo.com', password: 'learner123', role: 'Demo Learner', icon: Users },
   ]
 
   return (
@@ -64,7 +63,7 @@ export default function LoginPage() {
 
           <div className="grid grid-cols-1 gap-6">
             <div className="flex items-start space-x-4 p-4 rounded-lg bg-white/10 backdrop-blur-sm">
-              <TrendingUp className="h-6 w-6 text-yellow-300 flex-shrink-0 mt-1" />
+              <BarChart className="h-6 w-6 text-yellow-300 flex-shrink-0 mt-1" />
               <div>
                 <h3 className="font-semibold mb-1">AI Risk Prediction</h3>
                 <p className="text-sm text-blue-100">Early warning system to identify at-risk learners before they drop out</p>

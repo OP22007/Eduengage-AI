@@ -15,8 +15,7 @@ import {
   Target, 
   Zap,
   ArrowRight,
-  Star,
-  CheckCircle
+  Star
 } from 'lucide-react'
 
 export default function HomePage() {
@@ -203,7 +202,7 @@ export default function HomePage() {
             Experience the full platform with our pre-configured demo accounts
           </p>
           
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6">
             <Card className="border-2 border-blue-200 bg-blue-50">
               <CardHeader>
                 <Shield className="h-8 w-8 text-blue-600 mx-auto mb-2" />
@@ -220,27 +219,13 @@ export default function HomePage() {
             
             <Card className="border-2 border-green-200 bg-green-50">
               <CardHeader>
-                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                <CardTitle className="text-green-900">Successful Learner</CardTitle>
-                <CardDescription>High engagement profile</CardDescription>
+                <Users className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <CardTitle className="text-green-900">Demo Learner</CardTitle>
+                <CardDescription>Sample learner profile</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm text-green-800">
-                  <p><strong>Email:</strong> learner2@demo.com</p>
-                  <p><strong>Password:</strong> learner123</p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="border-2 border-red-200 bg-red-50">
-              <CardHeader>
-                <TrendingUp className="h-8 w-8 text-red-600 mx-auto mb-2" />
-                <CardTitle className="text-red-900">At-Risk Learner</CardTitle>
-                <CardDescription>Needs intervention</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm text-red-800">
-                  <p><strong>Email:</strong> learner1@demo.com</p>
+                  <p><strong>Email:</strong> learner@demo.com</p>
                   <p><strong>Password:</strong> learner123</p>
                 </div>
               </CardContent>

@@ -48,26 +48,36 @@ interface Course {
 }
 
 // Button Component
-const Button = ({ children, onClick, variant = 'primary', size = 'md', className = '', disabled = false, ...props }: any) => {
+interface ButtonProps {
+  children: React.ReactNode
+  onClick?: () => void
+  variant?: 'primary' | 'outline' | 'secondary'
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
+  disabled?: boolean
+  [key: string]: any
+}
+
+const Button = ({ children, onClick, variant = 'primary', size = 'md', className = '', disabled = false, ...props }: ButtonProps) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2'
   
   const variants = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
     outline: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-blue-500',
     secondary: 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500',
-  }
+  } as const
   
   const sizes = {
     sm: 'px-3 py-1.5 text-sm',
     md: 'px-4 py-2 text-sm',
     lg: 'px-6 py-3 text-base',
-  }
+  } as const
   
   const disabledClasses = disabled ? 'opacity-50 cursor-not-allowed' : ''
   
   return (
     <button
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${disabledClasses} ${className}`}
+      className={`${baseClasses} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${disabledClasses} ${className}`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       {...props}
@@ -78,12 +88,18 @@ const Button = ({ children, onClick, variant = 'primary', size = 'md', className
 }
 
 // Badge Component
-const Badge = ({ children, variant = 'default', className = '' }: any) => {
+interface BadgeProps {
+  children: React.ReactNode
+  variant?: 'default' | 'secondary' | 'outline'
+  className?: string
+}
+
+const Badge = ({ children, variant = 'default', className = '' }: BadgeProps) => {
   const variants = {
     default: 'bg-gray-100 text-gray-800',
     secondary: 'bg-blue-100 text-blue-800',
     outline: 'border border-gray-300 bg-white text-gray-700',
-  }
+  } as const
   
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]} ${className}`}>

@@ -531,7 +531,6 @@ export default function AdminDashboard() {
               <span>AI Recommendations</span>
               {aiInsights && (
                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                  Powered by Gemini AI
                 </span>
               )}
             </CardTitle>
