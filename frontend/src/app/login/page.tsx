@@ -121,7 +121,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="h-12"
+                    className="h-12 text-black"
                   />
                 </div>
                 <div className="space-y-2">
@@ -136,7 +136,7 @@ export default function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="h-12 pr-10"
+                      className="h-12 pr-10  text-black"
                     />
                     <button
                       type="button"
