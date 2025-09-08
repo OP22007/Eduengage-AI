@@ -67,6 +67,7 @@ interface Learner {
     avgSessionTime: number
     completionRate: number
   }
+  actualLastActivity?: string  // New field from backend
 }
 
 interface LearnersData {
@@ -96,25 +97,47 @@ export default function AdminLearnersPage() {
 
   useEffect(() => {
     fetchLearners()
-  }, [filters, currentPage])
+  }, [filters.riskLevel, filters.status, filters.sortBy, filters.sortOrder, currentPage])
+
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (filters.search !== '') {
+        fetchLearners()
+      }
+    }, 500) // 500ms delay
+
+    return () => clearTimeout(timeoutId)
+  }, [filters.search])
+
+  // Fetch immediately when search is cleared
+  useEffect(() => {
+    if (filters.search === '') {
+      fetchLearners()
+    }
+  }, [filters.search])
 
   const fetchLearners = async () => {
     try {
       setIsLoading(true)
       
-      // Filter out "all" values before sending to API
+      // Filter out "all" values and empty strings before sending to API
       const apiFilters = Object.entries(filters).reduce((acc, [key, value]) => {
-        if (value !== 'all' && value !== '') {
-          acc[key] = value
+        if (value !== 'all' && value !== '' && value.trim() !== '') {
+          acc[key] = value.trim()
         }
         return acc
       }, {} as Record<string, string>)
+
+      console.log('Sending API filters:', apiFilters) // Debug log
       
       const response = await adminAPI.getLearners({
         page: currentPage,
         limit: 20,
         ...apiFilters
       })
+      
+      console.log('API response:', response.data) // Debug log
       setLearnersData(response.data.data)
     } catch (error) {
       console.error('Error fetching learners:', error)
@@ -126,6 +149,18 @@ export default function AdminLearnersPage() {
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
     setCurrentPage(1)
+  }
+
+  const clearAllFilters = () => {
+    setFilters({
+      search: '',
+      riskLevel: 'all',
+      status: 'all',
+      sortBy: 'riskScore',
+      sortOrder: 'desc'
+    })
+    setCurrentPage(1)
+    setActiveTab('all')
   }
 
   const handleSendIntervention = async (learner: Learner, type: string, message: string) => {
@@ -303,9 +338,16 @@ export default function AdminLearnersPage() {
                 <p className="text-sm font-medium text-green-700 mb-1">Active Today</p>
                 <p className="text-3xl font-bold text-green-900">
                   {filteredLearners.filter(l => {
-                    const lastLogin = new Date(l.engagement?.lastLogin)
+                    const lastActivity = l.actualLastActivity 
+                      ? new Date(l.actualLastActivity)
+                      : l.engagement?.lastLogin 
+                        ? new Date(l.engagement.lastLogin)
+                        : null
+                    
+                    if (!lastActivity) return false
+                    
                     const today = new Date()
-                    return lastLogin.toDateString() === today.toDateString()
+                    return lastActivity.toDateString() === today.toDateString()
                   }).length}
                 </p>
                 <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
@@ -397,6 +439,15 @@ export default function AdminLearnersPage() {
                   <SelectItem value="completionRate" className="font-medium text-gray-900">Completion Rate</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Button
+                variant="outline"
+                onClick={clearAllFilters}
+                className="h-12 px-4 border-gray-300 hover:bg-gray-50"
+                title="Clear all filters"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -553,9 +604,11 @@ export default function AdminLearnersPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-gray-700">Last Activity</span>
                         <span className="text-xs font-semibold text-gray-900">
-                          {learner.engagement?.lastLogin 
-                            ? new Date(learner.engagement.lastLogin).toLocaleDateString()
-                            : 'Never'
+                          {learner.actualLastActivity 
+                            ? new Date(learner.actualLastActivity).toLocaleDateString()
+                            : learner.engagement?.lastLogin 
+                              ? new Date(learner.engagement.lastLogin).toLocaleDateString()
+                              : 'Never'
                           }
                         </span>
                       </div>
@@ -651,10 +704,7 @@ export default function AdminLearnersPage() {
                     : `No learners in the ${activeTab.replace('-', ' ')} category.`
                   }
                 </p>
-                <Button onClick={() => {
-                  setFilters({ search: '', riskLevel: 'all', status: 'all', sortBy: 'riskScore', sortOrder: 'desc' })
-                  setActiveTab('all')
-                }}>
+                <Button onClick={clearAllFilters}>
                   Clear Filters
                 </Button>
               </CardContent>

@@ -43,14 +43,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         { name: 'Learners', href: '/admin/learners', icon: Users },
         { name: 'Analytics', href: '/analytics', icon: BarChart3 },
         { name: 'Interventions', href: '/admin/interventions', icon: MessageSquare },
-        { name: 'Settings', href: '/settings', icon: Settings },
+        // { name: 'Settings', href: '/settings', icon: Settings },
       ]
     : [
         { name: 'Dashboard', href: '/dashboard', icon: Home },
         { name: 'My Courses', href: '/courses', icon: BookOpen },
         { name: 'Achievements', href: '/achievements', icon: Trophy },
-        { name: 'Calendar', href: '/calendar', icon: Calendar },
-        { name: 'Settings', href: '/settings', icon: Settings },
+        // { name: 'Calendar', href: '/calendar', icon: Calendar },
+        // { name: 'Settings', href: '/settings', icon: Settings },
       ]
 
   return (

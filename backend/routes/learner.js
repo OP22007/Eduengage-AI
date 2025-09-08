@@ -197,8 +197,18 @@ router.post('/activity', async (req, res) => {
     const { courseId, type, duration, metadata } = req.body;
 
     const learner = await Learner.findOne({ userId: req.user._id });
+    if (!learner) {
+      return res.status(404).json({
+        success: false,
+        message: 'Learner profile not found'
+      });
+    }
 
-    const activity = new Activity({
+    // Import engagement service
+    const EngagementService = require('../services/engagementService');
+
+    // Add activity and update metrics using the service
+    const result = await EngagementService.addActivityAndUpdateMetrics({
       learnerId: learner._id,
       courseId,
       type,
@@ -207,19 +217,18 @@ router.post('/activity', async (req, res) => {
       timestamp: new Date()
     });
 
-    await activity.save();
-
-    // Update learner engagement data
-    const totalHours = learner.engagementData.totalHours + (duration / 3600);
-    await Learner.findByIdAndUpdate(learner._id, {
-      'engagementData.totalHours': totalHours,
-      'engagementData.lastLogin': new Date()
-    });
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to log activity',
+        error: result.error
+      });
+    }
 
     res.json({
       success: true,
-      message: 'Activity logged successfully',
-      data: activity
+      message: 'Activity logged and metrics updated successfully',
+      data: result.activity
     });
   } catch (error) {
     console.error('Activity logging error:', error);

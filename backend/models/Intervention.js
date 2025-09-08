@@ -24,6 +24,10 @@ const interventionSchema = new mongoose.Schema({
       'achievement_celebration',
       'progress_milestone',
       'personalized_nudge',
+      'learning_support',
+      'progress_reminder',
+      'peer_connection',
+      'instructor_outreach',
       'manual_intervention'
     ],
     required: true
@@ -41,10 +45,18 @@ const interventionSchema = new mongoose.Schema({
       'streak_milestone',
       'peer_activity',
       'course_completion',
+      'high_risk_score',
+      'inactivity',
+      'automated_system',
       'manual_admin',
       'manual_instructor'
     ],
     required: true
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'sent', 'delivered', 'opened', 'responded', 'failed'],
+    default: 'pending'
   },
   content: {
     subject: String,

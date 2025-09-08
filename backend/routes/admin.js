@@ -155,32 +155,280 @@ router.get('/learners', async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
+    // Debug logging
+    console.log('Admin learners request:', {
+      page,
+      limit,
+      riskLevel,
+      status,
+      search,
+      sortBy,
+      sortOrder
+    });
+
     const skip = (page - 1) * limit;
+    let pipeline = [];
+
+    // Initial match stage for basic filtering
     let matchStage = {};
 
-    // Build filters
-    if (riskLevel) {
-      if (riskLevel === 'high') {
-        matchStage['enrollments.riskScore'] = { $gte: 0.8 };
-      } else if (riskLevel === 'medium') {
-        matchStage['enrollments.riskScore'] = { $gte: 0.6, $lt: 0.8 };
-      } else if (riskLevel === 'low') {
-        matchStage['enrollments.riskScore'] = { $lt: 0.6 };
-      }
+    // Search filter - match on user name or email
+    if (search && search.trim()) {
+      pipeline.push({
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      });
+      
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'user.profile.name': { $regex: search.trim(), $options: 'i' } },
+            { 'user.email': { $regex: search.trim(), $options: 'i' } }
+          ]
+        }
+      });
     }
 
-    if (status) {
+    // Status filter - filter enrollments by status
+    if (status && status !== 'all') {
       matchStage['enrollments.status'] = status;
     }
 
-    const learners = await Learner.find(matchStage)
-      .populate('userId', 'profile.name email profile.joinDate')
-      .populate('enrollments.courseId', 'title difficulty category')
-      .sort({ [`enrollments.${sortBy}`]: sortOrder === 'desc' ? -1 : 1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Risk level filter - calculate average risk score and filter
+    if (riskLevel && riskLevel !== 'all') {
+      pipeline.push({
+        $addFields: {
+          avgRiskScore: {
+            $cond: {
+              if: { $gt: [{ $size: '$enrollments' }, 0] },
+              then: { $avg: '$enrollments.riskScore' },
+              else: 0
+            }
+          }
+        }
+      });
 
-    const total = await Learner.countDocuments(matchStage);
+      let riskFilter = {};
+      if (riskLevel === 'high') {
+        riskFilter = { avgRiskScore: { $gte: 0.7 } };
+      } else if (riskLevel === 'medium') {
+        riskFilter = { avgRiskScore: { $gte: 0.4, $lt: 0.7 } };
+      } else if (riskLevel === 'low') {
+        riskFilter = { avgRiskScore: { $lt: 0.4 } };
+      }
+
+      pipeline.push({ $match: riskFilter });
+    }
+
+    // Add the basic match stage if there are enrollment filters
+    if (Object.keys(matchStage).length > 0) {
+      pipeline.unshift({ $match: matchStage });
+    }
+
+    // Add sorting
+    let sortStage = {};
+    if (sortBy === 'riskScore') {
+      // Sort by average risk score
+      if (!riskLevel || riskLevel === 'all') {
+        pipeline.push({
+          $addFields: {
+            avgRiskScore: {
+              $cond: {
+                if: { $gt: [{ $size: '$enrollments' }, 0] },
+                then: { $avg: '$enrollments.riskScore' },
+                else: 0
+              }
+            }
+          }
+        });
+      }
+      sortStage = { avgRiskScore: sortOrder === 'desc' ? -1 : 1 };
+    } else if (sortBy === 'lastActivity') {
+      // We'll add this field later in the pipeline, so we'll sort after the lookup
+      sortStage = { actualLastActivity: sortOrder === 'desc' ? -1 : 1 };
+    } else if (sortBy === 'progress') {
+      pipeline.push({
+        $addFields: {
+          avgProgress: {
+            $cond: {
+              if: { $gt: [{ $size: '$enrollments' }, 0] },
+              then: { $avg: '$enrollments.progress' },
+              else: 0
+            }
+          }
+        }
+      });
+      sortStage = { avgProgress: sortOrder === 'desc' ? -1 : 1 };
+    } else if (sortBy === 'completionRate') {
+      sortStage = { 'engagementData.completionRate': sortOrder === 'desc' ? -1 : 1 };
+    } else {
+      sortStage = { createdAt: -1 };
+    }
+
+    // Add sorting stage only if it's not lastActivity (we'll sort that later)
+    if (sortBy !== 'lastActivity') {
+      pipeline.push({ $sort: sortStage });
+    }
+
+    // Count total documents for pagination (before adding lookup stages for performance)
+    let countPipeline;
+    if (sortBy === 'lastActivity') {
+      // For lastActivity, we need to include the lookup in count pipeline
+      countPipeline = [
+        ...pipeline,
+        {
+          $lookup: {
+            from: 'activities',
+            localField: '_id',
+            foreignField: 'learnerId',
+            as: 'recentActivities',
+            pipeline: [
+              { $sort: { timestamp: -1 } },
+              { $limit: 1 },
+              { $project: { timestamp: 1 } }
+            ]
+          }
+        },
+        {
+          $addFields: {
+            actualLastActivity: {
+              $cond: {
+                if: { $gt: [{ $size: '$recentActivities' }, 0] },
+                then: { $arrayElemAt: ['$recentActivities.timestamp', 0] },
+                else: '$engagementData.lastLogin'
+              }
+            }
+          }
+        },
+        { $sort: sortStage },
+        { $count: "total" }
+      ];
+    } else {
+      countPipeline = [...pipeline, { $count: "total" }];
+    }
+    const countResult = await Learner.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Add pagination
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: parseInt(limit) });
+
+    // Add population stages and calculate real last activity
+    pipeline.push({
+      $lookup: {
+        from: 'activities',
+        localField: '_id',
+        foreignField: 'learnerId',
+        as: 'recentActivities',
+        pipeline: [
+          { $sort: { timestamp: -1 } },
+          { $limit: 1 },
+          { $project: { timestamp: 1 } }
+        ]
+      }
+    });
+
+    // Calculate actual last activity
+    pipeline.push({
+      $addFields: {
+        actualLastActivity: {
+          $cond: {
+            if: { $gt: [{ $size: '$recentActivities' }, 0] },
+            then: { $arrayElemAt: ['$recentActivities.timestamp', 0] },
+            else: '$engagementData.lastLogin'
+          }
+        }
+      }
+    });
+
+    // Add sorting for lastActivity case
+    if (sortBy === 'lastActivity') {
+      pipeline.push({ $sort: sortStage });
+    }
+
+    // Add pagination
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: parseInt(limit) });
+
+    pipeline.push({
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'userId',
+        pipeline: [
+          {
+            $project: {
+              'profile.name': 1,
+              'profile.joinDate': 1,
+              'email': 1
+            }
+          }
+        ]
+      }
+    });
+
+    pipeline.push({
+      $unwind: {
+        path: '$userId',
+        preserveNullAndEmptyArrays: true
+      }
+    });
+
+    pipeline.push({
+      $lookup: {
+        from: 'courses',
+        localField: 'enrollments.courseId',
+        foreignField: '_id',
+        as: 'courseDetails'
+      }
+    });
+
+    // Map course details to enrollments
+    pipeline.push({
+      $addFields: {
+        enrollments: {
+          $map: {
+            input: '$enrollments',
+            as: 'enrollment',
+            in: {
+              $mergeObjects: [
+                '$$enrollment',
+                {
+                  courseId: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$courseDetails',
+                          cond: { $eq: ['$$this._id', '$$enrollment.courseId'] }
+                        }
+                      },
+                      0
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    });
+
+    // Remove the temporary courseDetails field
+    pipeline.push({
+      $project: {
+        courseDetails: 0
+      }
+    });
+
+    console.log('Pipeline stages:', pipeline.length);
+    const learners = await Learner.aggregate(pipeline);
+
+    console.log(`Found ${learners.length} learners, total: ${total}`);
 
     res.json({
       success: true,
@@ -215,6 +463,7 @@ router.post('/intervention', async (req, res) => {
       type,
       trigger,
       content,
+      status: scheduling?.immediate ? 'sent' : 'pending',
       scheduling: {
         ...scheduling,
         scheduledFor: scheduling?.scheduledFor || new Date()
@@ -276,6 +525,224 @@ router.post('/intervention', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error creating intervention'
+    });
+  }
+});
+
+// @route   GET /api/admin/interventions
+// @desc    Get all interventions with filters and pagination
+// @access  Private (Admin only)
+router.get('/interventions', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      type,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    
+    if (type && type !== 'all') {
+      filter.type = type;
+    }
+
+    // Build aggregation pipeline
+    const pipeline = [
+      {
+        $lookup: {
+          from: 'learners',
+          localField: 'learnerId',
+          foreignField: '_id',
+          as: 'learner'
+        }
+      },
+      {
+        $unwind: '$learner'
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'learner.userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      {
+        $unwind: '$user'
+      },
+      {
+        $addFields: {
+          'learnerId._id': '$learner._id',
+          'learnerId.userId': {
+            _id: '$user._id',
+            email: '$user.email',
+            profile: '$user.profile'
+          }
+        }
+      }
+    ];
+
+    // Add search filter
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'user.profile.name': { $regex: search, $options: 'i' } },
+            { 'user.email': { $regex: search, $options: 'i' } },
+            { 'content.subject': { $regex: search, $options: 'i' } }
+          ]
+        }
+      });
+    }
+
+    // Add main filters
+    if (Object.keys(filter).length > 0) {
+      pipeline.push({ $match: filter });
+    }
+
+    // Add sorting
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    pipeline.push({ $sort: sort });
+
+    // Execute aggregation with pagination
+    const totalPipeline = [...pipeline, { $count: 'total' }];
+    const totalResult = await Intervention.aggregate(totalPipeline);
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+    // Add pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
+
+    const interventions = await Intervention.aggregate(pipeline);
+
+    res.json({
+      success: true,
+      data: {
+        interventions,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / parseInt(limit)),
+          total,
+          limit: parseInt(limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching interventions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching interventions'
+    });
+  }
+});
+
+// @route   GET /api/admin/interventions/stats
+// @desc    Get intervention statistics
+// @access  Private (Admin only)
+router.get('/interventions/stats', async (req, res) => {
+  try {
+    const stats = await Intervention.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+          },
+          sent: {
+            $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] }
+          },
+          delivered: {
+            $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] }
+          },
+          responded: {
+            $sum: { $cond: [{ $eq: ['$status', 'responded'] }, 1, 0] }
+          },
+          failed: {
+            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    const result = stats.length > 0 ? stats[0] : {
+      total: 0,
+      pending: 0,
+      sent: 0,
+      delivered: 0,
+      responded: 0,
+      failed: 0
+    };
+
+    // Calculate success metrics
+    const successful = result.delivered + result.responded;
+    const responseRate = result.total > 0 ? (result.responded / result.total) * 100 : 0;
+    
+    // Calculate average response time (placeholder - would need actual response timestamps)
+    const avgResponseTime = 2.5; // hours (placeholder)
+
+    res.json({
+      success: true,
+      data: {
+        ...result,
+        successful,
+        responseRate: Math.round(responseRate * 100) / 100,
+        avgResponseTime
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching intervention stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching intervention statistics'
+    });
+  }
+});
+
+// @route   DELETE /api/admin/interventions/:id
+// @desc    Delete an intervention
+// @access  Private (Admin only)
+router.delete('/interventions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const intervention = await Intervention.findById(id);
+    if (!intervention) {
+      return res.status(404).json({
+        success: false,
+        message: 'Intervention not found'
+      });
+    }
+
+    // Only allow deletion of pending interventions
+    if (intervention.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete interventions that have already been sent'
+      });
+    }
+
+    await Intervention.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Intervention deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting intervention:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error deleting intervention'
     });
   }
 });
