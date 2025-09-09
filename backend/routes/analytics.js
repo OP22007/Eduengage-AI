@@ -66,9 +66,16 @@ router.get('/overview', async (req, res) => {
     const stats = engagementStats[0] || {};
     
     // Prepare data for Gemini insights
+    const activeToday = await Learner.countDocuments({
+      'engagementData.lastLogin': { 
+        $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        $lt: new Date(new Date().setHours(23, 59, 59, 999))
+      }
+    });
+    
     const platformData = {
       totalLearners,
-      activeToday: recentActivities,
+      activeToday,
       totalActivities,
       highRisk: highRiskCount,
       mediumRisk: mediumRiskCount,

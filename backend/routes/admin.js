@@ -110,8 +110,11 @@ router.get('/dashboard', async (req, res) => {
         totalLearners,
         totalCourses,
         totalActivities,
-        activeToday: await Activity.countDocuments({
-          timestamp: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+        activeToday: await Learner.countDocuments({
+          'engagementData.lastLogin': { 
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            $lt: new Date(new Date().setHours(23, 59, 59, 999))
+          }
         })
       },
       riskDistribution,
@@ -913,8 +916,11 @@ router.get('/gemini-insights', async (req, res) => {
     const totalLearners = await Learner.countDocuments();
     const totalCourses = await Course.countDocuments();
     const totalActivities = await Activity.countDocuments();
-    const activeToday = await Activity.countDocuments({
-      timestamp: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+    const activeToday = await Learner.countDocuments({
+      'engagementData.lastLogin': { 
+        $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        $lt: new Date(new Date().setHours(23, 59, 59, 999))
+      }
     });
 
     // Get risk distribution
